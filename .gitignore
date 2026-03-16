@@ -1,0 +1,59 @@
+# Binaries
+zhipin-mcp
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+*.html
+coverage.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Cookies
+cookies/*.json
+cookies/*.txt
+
+# Config (local overrides)
+configs/config.local.yaml
+
+# Temp
+tmp/
+temp/
+*.tmp

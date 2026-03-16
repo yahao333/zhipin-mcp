@@ -133,21 +133,21 @@ help:
 	@echo "  make help          显示帮助信息"
 	@echo ""
 	@echo "API 测试命令 (需要先启动服务):"
-	@echo "  make api-health          健康检查"
-	@echo "  make api-login-status    登录状态"
-	@echo "  make api-login-qrcode    获取登录二维码"
-	@echo "  make api-login-delete    删除 cookies"
-	@echo "  make api-search          搜索职位"
-	@echo "  make api-job-detail      职位详情"
-	@echo "  make api-deliver         投递简历"
-	@echo "  make api-batch-deliver  批量投递"
-	@echo "  make api-delivered       已投递列表"
-	@echo "  make api-stats           投递统计"
-	@echo "  make api-config-get      获取配置"
-	@echo "  make api-config-update   更新配置"
-	@echo "  make api-cron-start      启动定时任务"
-	@echo "  make api-cron-stop       停止定时任务"
-	@echo "  make api-all             运行所有 API 测试"
+	@echo "  make api-health           健康检查"
+	@echo "  make api-login-status     登录状态"
+	@echo "  make api-login-qrcode     获取登录二维码"
+	@echo "  make api-login-delete     删除 cookies"
+	@echo "  make api-search           搜索职位"
+	@echo "  make api-job-detail       职位详情"
+	@echo "  make api-deliver          投递简历"
+	@echo "  make api-batch-deliver   批量投递"
+	@echo "  make api-delivered        已投递列表"
+	@echo "  make api-stats            投递统计"
+	@echo "  make api-config-get       获取配置"
+	@echo "  make api-config-update    更新配置"
+	@echo "  make api-cron-start       启动定时任务"
+	@echo "  make api-cron-stop        停止定时任务"
+	@echo "  make api-all              运行所有 API 测试"
 
 # 默认帮助
 .DEFAULT_GOAL := help
@@ -156,37 +156,37 @@ help:
 # API 测试命令 (需要先启动服务)
 # =============================================================================
 
-PORT := :18061
+API_BASE := http://localhost:18061
 
 # 健康检查
 .PHONY: api-health
 api-health:
 	@echo "==> 健康检查"
-	curl -s $(PORT)/api/health
+	curl -s $(API_BASE)/api/health
 
 # 登录状态
 .PHONY: api-login-status
 api-login-status:
 	@echo "==> 检查登录状态"
-	curl -s $(PORT)/api/login/status
+	curl -s $(API_BASE)/api/login/status
 
 # 获取登录二维码
 .PHONY: api-login-qrcode
 api-login-qrcode:
 	@echo "==> 获取登录二维码"
-	curl -s $(PORT)/api/login/qrcode
+	curl -s $(API_BASE)/api/login/qrcode
 
 # 删除 cookies
 .PHONY: api-login-delete
 api-login-delete:
 	@echo "==> 删除 cookies"
-	curl -s -X DELETE $(PORT)/api/login/cookies
+	curl -s -X DELETE $(API_BASE)/api/login/cookies
 
 # 搜索职位
 .PHONY: api-search
 api-search:
 	@echo "==> 搜索职位"
-	curl -s -X POST $(PORT)/api/jobs/search \
+	curl -s -X POST $(API_BASE)/api/jobs/search \
 		-H "Content-Type: application/json" \
 		-d '{"keyword": "Go开发", "city": "北京"}'
 
@@ -195,14 +195,14 @@ api-search:
 api-job-detail:
 	@echo "==> 职位详情"
 	@echo "注意: job_id 需要替换为真实 ID"
-	curl -s $(PORT)/api/jobs/job123456
+	curl -s $(API_BASE)/api/jobs/job123456
 
 # 投递简历
 .PHONY: api-deliver
 api-deliver:
 	@echo "==> 投递简历"
 	@echo "注意: job_id 需要替换为真实 ID"
-	curl -s -X POST $(PORT)/api/deliver \
+	curl -s -X POST $(API_BASE)/api/deliver \
 		-H "Content-Type: application/json" \
 		-d '{"job_id": "job123"}'
 
@@ -211,7 +211,7 @@ api-deliver:
 api-batch-deliver:
 	@echo "==> 批量投递"
 	@echo "注意: job_id 需要替换为真实 ID"
-	curl -s -X POST $(PORT)/api/batch/deliver \
+	curl -s -X POST $(API_BASE)/api/batch/deliver \
 		-H "Content-Type: application/json" \
 		-d '{"job_ids": ["job123", "job456", "job789"]}'
 
@@ -219,25 +219,25 @@ api-batch-deliver:
 .PHONY: api-delivered
 api-delivered:
 	@echo "==> 已投递列表"
-	curl -s "$(PORT)/api/delivered?limit=20&offset=0"
+	curl -s "$(API_BASE)/api/delivered?limit=20&offset=0"
 
 # 投递统计
 .PHONY: api-stats
 api-stats:
 	@echo "==> 投递统计"
-	curl -s $(PORT)/api/stats
+	curl -s $(API_BASE)/api/stats
 
 # 获取配置
 .PHONY: api-config-get
 api-config-get:
 	@echo "==> 获取配置"
-	curl -s $(PORT)/api/config
+	curl -s $(API_BASE)/api/config
 
 # 更新配置
 .PHONY: api-config-update
 api-config-update:
 	@echo "==> 更新配置 (每日上限 20)"
-	curl -s -X PUT $(PORT)/api/config \
+	curl -s -X PUT $(API_BASE)/api/config \
 		-H "Content-Type: application/json" \
 		-d '{"max_daily": 20}'
 
@@ -245,7 +245,7 @@ api-config-update:
 .PHONY: api-cron-start
 api-cron-start:
 	@echo "==> 启动定时任务"
-	curl -s -X POST $(PORT)/api/cron/start \
+	curl -s -X POST $(API_BASE)/api/cron/start \
 		-H "Content-Type: application/json" \
 		-d '{
 			"task_name": "每日求职",
@@ -259,7 +259,7 @@ api-cron-start:
 api-cron-stop:
 	@echo "==> 停止定时任务"
 	@echo "注意: task_id 需要替换为真实 ID"
-	curl -s -X POST $(PORT)/api/cron/stop \
+	curl -s -X POST $(API_BASE)/api/cron/stop \
 		-H "Content-Type: application/json" \
 		-d '{"task_id": 1}'
 

@@ -58,6 +58,24 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 
 	loginAction := zhipin.NewLogin(page)
 
+	// 先检查登录状态
+	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
+	if err != nil {
+		closeBrowserPage(page)
+		return nil, err
+	}
+
+	// 如果已登录，直接返回
+	if isLoggedIn {
+		defer closeBrowserPage(page)
+		return &LoginQrcodeResponse{
+			Timeout:   "0s",
+			Img:       "",
+			IsLoggedIn: true,
+		}, nil
+	}
+
+	// 未登录，获取二维码
 	img, loggedIn, err := loginAction.FetchQrcodeImage(ctx)
 	if err != nil || loggedIn {
 		defer closeBrowserPage(page)

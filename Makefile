@@ -131,6 +131,159 @@ help:
 	@echo "  make deps          下载依赖"
 	@echo "  make db-init       初始化数据库目录"
 	@echo "  make help          显示帮助信息"
+	@echo ""
+	@echo "API 测试命令 (需要先启动服务):"
+	@echo "  make api-health          健康检查"
+	@echo "  make api-login-status    登录状态"
+	@echo "  make api-login-qrcode    获取登录二维码"
+	@echo "  make api-login-delete    删除 cookies"
+	@echo "  make api-search          搜索职位"
+	@echo "  make api-job-detail      职位详情"
+	@echo "  make api-deliver         投递简历"
+	@echo "  make api-batch-deliver  批量投递"
+	@echo "  make api-delivered       已投递列表"
+	@echo "  make api-stats           投递统计"
+	@echo "  make api-config-get      获取配置"
+	@echo "  make api-config-update   更新配置"
+	@echo "  make api-cron-start      启动定时任务"
+	@echo "  make api-cron-stop       停止定时任务"
+	@echo "  make api-all             运行所有 API 测试"
 
 # 默认帮助
 .DEFAULT_GOAL := help
+
+# =============================================================================
+# API 测试命令 (需要先启动服务)
+# =============================================================================
+
+PORT := :18061
+
+# 健康检查
+.PHONY: api-health
+api-health:
+	@echo "==> 健康检查"
+	curl -s $(PORT)/api/health
+
+# 登录状态
+.PHONY: api-login-status
+api-login-status:
+	@echo "==> 检查登录状态"
+	curl -s $(PORT)/api/login/status
+
+# 获取登录二维码
+.PHONY: api-login-qrcode
+api-login-qrcode:
+	@echo "==> 获取登录二维码"
+	curl -s $(PORT)/api/login/qrcode
+
+# 删除 cookies
+.PHONY: api-login-delete
+api-login-delete:
+	@echo "==> 删除 cookies"
+	curl -s -X DELETE $(PORT)/api/login/cookies
+
+# 搜索职位
+.PHONY: api-search
+api-search:
+	@echo "==> 搜索职位"
+	curl -s -X POST $(PORT)/api/jobs/search \
+		-H "Content-Type: application/json" \
+		-d '{"keyword": "Go开发", "city": "北京"}'
+
+# 职位详情
+.PHONY: api-job-detail
+api-job-detail:
+	@echo "==> 职位详情"
+	@echo "注意: job_id 需要替换为真实 ID"
+	curl -s $(PORT)/api/jobs/job123456
+
+# 投递简历
+.PHONY: api-deliver
+api-deliver:
+	@echo "==> 投递简历"
+	@echo "注意: job_id 需要替换为真实 ID"
+	curl -s -X POST $(PORT)/api/deliver \
+		-H "Content-Type: application/json" \
+		-d '{"job_id": "job123"}'
+
+# 批量投递
+.PHONY: api-batch-deliver
+api-batch-deliver:
+	@echo "==> 批量投递"
+	@echo "注意: job_id 需要替换为真实 ID"
+	curl -s -X POST $(PORT)/api/batch/deliver \
+		-H "Content-Type: application/json" \
+		-d '{"job_ids": ["job123", "job456", "job789"]}'
+
+# 已投递列表
+.PHONY: api-delivered
+api-delivered:
+	@echo "==> 已投递列表"
+	curl -s "$(PORT)/api/delivered?limit=20&offset=0"
+
+# 投递统计
+.PHONY: api-stats
+api-stats:
+	@echo "==> 投递统计"
+	curl -s $(PORT)/api/stats
+
+# 获取配置
+.PHONY: api-config-get
+api-config-get:
+	@echo "==> 获取配置"
+	curl -s $(PORT)/api/config
+
+# 更新配置
+.PHONY: api-config-update
+api-config-update:
+	@echo "==> 更新配置 (每日上限 20)"
+	curl -s -X PUT $(PORT)/api/config \
+		-H "Content-Type: application/json" \
+		-d '{"max_daily": 20}'
+
+# 启动定时任务
+.PHONY: api-cron-start
+api-cron-start:
+	@echo "==> 启动定时任务"
+	curl -s -X POST $(PORT)/api/cron/start \
+		-H "Content-Type: application/json" \
+		-d '{
+			"task_name": "每日求职",
+			"cron_expression": "0 9 * * *",
+			"keyword": "Go后端开发",
+			"city": "北京"
+		}'
+
+# 停止定时任务
+.PHONY: api-cron-stop
+api-cron-stop:
+	@echo "==> 停止定时任务"
+	@echo "注意: task_id 需要替换为真实 ID"
+	curl -s -X POST $(PORT)/api/cron/stop \
+		-H "Content-Type: application/json" \
+		-d '{"task_id": 1}'
+
+# 运行所有 API 测试
+.PHONY: api-all
+api-all:
+	@echo "========================================"
+	@echo "BOSS直聘 MCP 服务 API 测试"
+	@echo "========================================"
+	@echo ""
+	@$(MAKE) api-health
+	@echo ""
+	@$(MAKE) api-login-status
+	@echo ""
+	@$(MAKE) api-login-qrcode
+	@echo ""
+	@$(MAKE) api-search
+	@echo ""
+	@$(MAKE) api-delivered
+	@echo ""
+	@$(MAKE) api-stats
+	@echo ""
+	@$(MAKE) api-config-get
+	@echo ""
+	@echo "========================================"
+	@echo "API 测试完成"
+	@echo "========================================"

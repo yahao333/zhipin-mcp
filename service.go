@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"math/rand"
 	"time"
 
@@ -75,6 +76,11 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 
 			if loginAction.WaitForLogin(ctxTimeout) {
 				logrus.Info("登录成功")
+				if err := saveCookies(page); err != nil {
+					logrus.Warnf("保存 cookies 失败: %v", err)
+				} else {
+					logrus.Info("cookies 已保存")
+				}
 			}
 		}()
 	}
@@ -461,6 +467,22 @@ func closeBrowserPage(page *rod.Page) {
 		page.Close()
 		page.Browser().Close()
 	}
+}
+
+// saveCookies 保存浏览器 cookies 到文件
+func saveCookies(page *rod.Page) error {
+	cks, err := page.Browser().GetCookies()
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(cks)
+	if err != nil {
+		return err
+	}
+
+	cookieLoader := cookies.NewLoadCookie(cookies.GetCookiesFilePath())
+	return cookieLoader.SaveCookies(data)
 }
 
 func randomDelay() {

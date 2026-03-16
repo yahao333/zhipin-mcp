@@ -57,3 +57,9 @@ configs/config.local.yaml
 tmp/
 temp/
 *.tmp
+
+.claude/
+
+docs/
+configs/config.yaml
+zhipin-mpc

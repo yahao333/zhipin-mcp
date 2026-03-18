@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/sirupsen/logrus"
+	"github.com/xpzouying/headless_browser"
 	"github.com/xpzouying/zhipin-mcp/browser"
 	"github.com/xpzouying/zhipin-mcp/configs"
 	"github.com/xpzouying/zhipin-mcp/cookies"
@@ -31,11 +32,11 @@ func (s *ZhipinService) DeleteCookies(ctx context.Context) error {
 
 // CheckLoginStatus 检查登录状态
 func (s *ZhipinService) CheckLoginStatus(ctx context.Context) (*LoginStatusResponse, error) {
-	page, err := newBrowserPage()
-	if err != nil {
-		return nil, err
-	}
-	defer closeBrowserPage(page)
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
 
 	loginAction := zhipin.NewLogin(page)
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
@@ -51,9 +52,12 @@ func (s *ZhipinService) CheckLoginStatus(ctx context.Context) (*LoginStatusRespo
 
 // GetLoginQrcode 获取登录二维码
 func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeResponse, error) {
-	page, err := newBrowserPage()
-	if err != nil {
-		return nil, err
+	b := newBrowser()
+	page := b.NewPage()
+
+	deferFunc := func() {
+		_ = page.Close()
+		b.Close()
 	}
 
 	loginAction := zhipin.NewLogin(page)
@@ -61,16 +65,16 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 	// 先检查登录状态
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
-		closeBrowserPage(page)
+		deferFunc()
 		return nil, err
 	}
 
 	// 如果已登录，直接返回
 	if isLoggedIn {
-		defer closeBrowserPage(page)
+		defer deferFunc()
 		return &LoginQrcodeResponse{
-			Timeout:   "0s",
-			Img:       "",
+			Timeout:    "0s",
+			Img:        "",
 			IsLoggedIn: true,
 		}, nil
 	}
@@ -78,7 +82,7 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 	// 未登录，获取二维码
 	img, loggedIn, err := loginAction.FetchQrcodeImage(ctx)
 	if err != nil || loggedIn {
-		defer closeBrowserPage(page)
+		defer deferFunc()
 	}
 	if err != nil {
 		return nil, err
@@ -90,7 +94,7 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 		go func() {
 			ctxTimeout, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			defer closeBrowserPage(page)
+			defer deferFunc()
 
 			if loginAction.WaitForLogin(ctxTimeout) {
 				logrus.Info("登录成功")
@@ -117,11 +121,11 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 
 // SearchJobs 搜索职位
 func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) (*SearchJobsResponse, error) {
-	page, err := newBrowserPage()
-	if err != nil {
-		return nil, err
-	}
-	defer closeBrowserPage(page)
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
 
 	// 检查登录状态
 	loginAction := zhipin.NewLogin(page)
@@ -162,11 +166,11 @@ func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) 
 
 // GetJobDetail 获取职位详情
 func (s *ZhipinService) GetJobDetail(ctx context.Context, jobID string) (*JobDetailResponse, error) {
-	page, err := newBrowserPage()
-	if err != nil {
-		return nil, err
-	}
-	defer closeBrowserPage(page)
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
 
 	detailAction := zhipin.NewDetail(page)
 	job, err := detailAction.GetJobDetail(ctx, jobID)
@@ -208,11 +212,11 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 	}
 
 	// 投递
-	page, err := newBrowserPage()
-	if err != nil {
-		return nil, err
-	}
-	defer closeBrowserPage(page)
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
 
 	deliverAction := zhipin.NewDeliver(page)
 	result, err := deliverAction.DeliverJob(ctx, req.JobID)
@@ -274,11 +278,11 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 		return nil, err
 	}
 
-	page, err := newBrowserPage()
-	if err != nil {
-		return nil, err
-	}
-	defer closeBrowserPage(page)
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
 
 	deliverAction := zhipin.NewDeliver(page)
 
@@ -474,17 +478,8 @@ func (s *ZhipinService) StopCron(ctx context.Context, taskID int) error {
 
 // 辅助函数
 
-func newBrowserPage() (*rod.Page, error) {
-	b := browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
-	page := b.NewPage()
-	return page, nil
-}
-
-func closeBrowserPage(page *rod.Page) {
-	if page != nil {
-		page.Close()
-		page.Browser().Close()
-	}
+func newBrowser() *headless_browser.Browser {
+	return browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
 }
 
 // saveCookies 保存浏览器 cookies 到文件

@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -158,4 +159,65 @@ func TestConfigYAML(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "8080", parsed.Server.Port)
 	assert.Equal(t, 50, parsed.Delivery.MaxDaily)
+}
+
+// TestInitHeadless 测试初始化无头模式
+func TestInitHeadless(t *testing.T) {
+	// 测试设置 true
+	InitHeadless(true)
+	assert.True(t, IsHeadless())
+
+	// 测试设置 false
+	InitHeadless(false)
+	assert.False(t, IsHeadless())
+
+	// 恢复默认值
+	InitHeadless(true)
+}
+
+// TestSetBinPath 测试设置浏览器二进制路径
+func TestSetBinPath(t *testing.T) {
+	// 保存原始值
+	original := binPath
+
+	// 设置新值
+	SetBinPath("/custom/bin/chromium")
+	assert.Equal(t, "/custom/bin/chromium", GetBinPath())
+
+	// 恢复原始值
+	binPath = original
+}
+
+// TestGetBinPathFromEnv 测试从环境变量获取浏览器路径
+func TestGetBinPathFromEnv(t *testing.T) {
+	// 保存原始值
+	original := binPath
+	origEnv := os.Getenv("ROD_BROWSER_BIN")
+
+	// 设置 binPath 为空，从环境变量获取
+	binPath = ""
+
+	// 设置环境变量
+	t.Setenv("ROD_BROWSER_BIN", "/env/bin/chrome")
+
+	// 测试从环境变量获取
+	assert.Equal(t, "/env/bin/chrome", GetBinPath())
+
+	// 恢复
+	binPath = original
+	os.Unsetenv("ROD_BROWSER_BIN")
+	_ = origEnv
+}
+
+// TestSetUserDataDir 测试设置用户数据目录
+func TestSetUserDataDir(t *testing.T) {
+	// 保存原始值
+	original := userDataDir
+
+	// 设置新值
+	SetUserDataDir("/tmp/user-data-dir")
+	assert.Equal(t, "/tmp/user-data-dir", GetUserDataDir())
+
+	// 恢复原始值
+	userDataDir = original
 }

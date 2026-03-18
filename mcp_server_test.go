@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,8 +123,11 @@ func TestMCPServer_HandleToolCall_GetLoginQrcode(t *testing.T) {
 		t.Skip("Skipping test in short mode")
 	}
 
+	// 添加超时控制，避免测试无限等待
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	server := NewMCPServer(NewZhipinService())
-	ctx := context.Background()
 
 	call := MCPToolCall{
 		Name:      "get_login_qrcode",

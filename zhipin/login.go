@@ -10,6 +10,8 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/xpzouying/zhipin-mcp/pkg/debug"
 )
 
 func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page, error) {
@@ -170,6 +172,8 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)
 
+	debug.WritePageHTMLToFile(pp, "data.html")
+
 	// 检查是否已经登录
 	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
 	if err != nil {
@@ -180,7 +184,7 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 	}
 
 	// 获取二维码图片 - 尝试多个选择器
-	selectors := []string{".qrcode img", ".login-qrcode img", "#qrcode", ".qrcode", "[class*='qrcode'] img"}
+	selectors := []string{".qr-code-box .qr-img-box", ".qrcode img", ".login-qrcode img", "#qrcode", ".qrcode", "[class*='qrcode'] img"}
 	var el *rod.Element
 
 	for _, sel := range selectors {

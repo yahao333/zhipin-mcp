@@ -1,7 +1,10 @@
 package main
 
 import (
+	"runtime/debug"
+
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 // setupRoutes 设置路由
@@ -11,8 +14,9 @@ func setupRoutes(app *AppServer) *gin.Engine {
 
 	// 中间件
 	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
+	router.Use(middlewareRecovery())
 	router.Use(middlewareCORS())
+	router.Use(middlewareAPILogger())
 
 	// API路由
 	api := router.Group("/api")
@@ -47,6 +51,47 @@ func setupRoutes(app *AppServer) *gin.Engine {
 	}
 
 	return router
+}
+
+// middlewareAPILogger API日志中间件
+func middlewareAPILogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 记录请求开始
+		logrus.Debugf("API调用: %s %s", c.Request.Method, c.Request.URL.Path)
+
+		// 记录请求参数
+		if c.Request.Method == "POST" || c.Request.Method == "PUT" {
+			if err := c.Request.ParseForm(); err == nil {
+				if formData := c.Request.Form.Encode(); formData != "" {
+					logrus.Debugf("API参数: %s", formData)
+				}
+			}
+		}
+
+		// 记录查询参数
+		if query := c.Request.URL.Query().Encode(); query != "" {
+			logrus.Debugf("API查询参数: %s", query)
+		}
+
+		c.Next()
+
+		// 记录响应状态
+		logrus.Debugf("API响应: %s %s - %d", c.Request.Method, c.Request.URL.Path, c.Writer.Status())
+	}
+}
+
+// middlewareRecovery 自定义recovery中间件
+func middlewareRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				logrus.Errorf("Panic recovered: %v\n%s", err, debug.Stack())
+				c.JSON(500, gin.H{"error": "Internal server error"})
+				c.Abort()
+			}
+		}()
+		c.Next()
+	}
 }
 
 // middlewareCORS CORS中间件

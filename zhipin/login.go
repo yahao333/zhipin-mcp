@@ -6,8 +6,27 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
+
+func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page, error) {
+	pp := page.Context(ctx).Timeout(45 * time.Second)
+
+	logrus.WithField("url", url).Debug("navigate start")
+
+	waitNav := pp.WaitNavigation(proto.PageLifecycleEventNameDOMContentLoaded)
+	if err := pp.Navigate(url); err != nil {
+		return nil, errors.Wrapf(err, "navigate to %s failed", url)
+	}
+	waitNav()
+
+	pp.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)()
+
+	logrus.WithField("url", url).Debug("navigate done")
+	return pp, nil
+}
 
 // Login 登录操作
 type Login struct {
@@ -21,10 +40,13 @@ func NewLogin(page *rod.Page) *Login {
 
 // CheckLoginStatus 检查登录状态
 func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
-	pp := l.page.Context(ctx)
-
+	logrus.Debugf("check login status")
 	// 访问BOSS直聘首页
-	pp.MustNavigate("https://www.zhipin.com/").MustWaitLoad()
+	pp, err := navigateAndWait(ctx, l.page, "https://www.zhipin.com/")
+	if err != nil {
+		return false, err
+	}
+	logrus.Debugf("page loaded")
 
 	// 等待页面稳定
 	time.Sleep(1 * time.Second)
@@ -51,10 +73,11 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 
 // FetchQrcodeImage 获取登录二维码
 func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
-	pp := l.page.Context(ctx)
-
 	// 访问BOSS直聘登录页
-	pp.MustNavigate("https://www.zhipin.com/user/login.html").MustWaitLoad()
+	pp, err := navigateAndWait(ctx, l.page, "https://www.zhipin.com/user/login.html")
+	if err != nil {
+		return "", false, err
+	}
 
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)
@@ -116,10 +139,11 @@ func (l *Login) WaitForLogin(ctx context.Context) bool {
 
 // LoginWithPassword 使用密码登录
 func (l *Login) LoginWithPassword(ctx context.Context, username, password string) (*LoginResult, error) {
-	pp := l.page.Context(ctx)
-
 	// 访问BOSS直聘登录页
-	pp.MustNavigate("https://www.zhipin.com/user/login.html").MustWaitLoad()
+	pp, err := navigateAndWait(ctx, l.page, "https://www.zhipin.com/user/login.html")
+	if err != nil {
+		return nil, err
+	}
 	time.Sleep(2 * time.Second)
 
 	// 切换到密码登录

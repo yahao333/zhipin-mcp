@@ -3,7 +3,6 @@ package cookies
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -70,12 +69,4 @@ func GetCookiesFilePath() string {
 	}
 
 	return filepath.Join(configDir, "cookies.json")
-}
-
-// IsCookieNotFound 检查错误是否是 cookies 文件不存在
-func IsCookieNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	return errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory")
 }

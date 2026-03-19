@@ -32,10 +32,7 @@ func (s *ZhipinService) DeleteCookies(ctx context.Context) error {
 
 // CheckLoginStatus 检查登录状态
 func (s *ZhipinService) CheckLoginStatus(ctx context.Context) (*LoginStatusResponse, error) {
-	b, err := newBrowser()
-	if err != nil {
-		return nil, err
-	}
+	b := newBrowser()
 	defer b.Close()
 
 	page := b.NewPage()
@@ -55,10 +52,7 @@ func (s *ZhipinService) CheckLoginStatus(ctx context.Context) (*LoginStatusRespo
 
 // GetLoginQrcode 获取登录二维码
 func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeResponse, error) {
-	b, err := newBrowser()
-	if err != nil {
-		return nil, err
-	}
+	b := newBrowser()
 	page := b.NewPage()
 
 	deferFunc := func() {
@@ -127,10 +121,7 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 
 // SearchJobs 搜索职位
 func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) (*SearchJobsResponse, error) {
-	b, err := newBrowser()
-	if err != nil {
-		return nil, err
-	}
+	b := newBrowser()
 	defer b.Close()
 
 	page := b.NewPage()
@@ -175,10 +166,7 @@ func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) 
 
 // GetJobDetail 获取职位详情
 func (s *ZhipinService) GetJobDetail(ctx context.Context, jobID string) (*JobDetailResponse, error) {
-	b, err := newBrowser()
-	if err != nil {
-		return nil, err
-	}
+	b := newBrowser()
 	defer b.Close()
 
 	page := b.NewPage()
@@ -224,10 +212,7 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 	}
 
 	// 投递
-	b, err := newBrowser()
-	if err != nil {
-		return nil, err
-	}
+	b := newBrowser()
 	defer b.Close()
 
 	page := b.NewPage()
@@ -293,10 +278,7 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 		return nil, err
 	}
 
-	b, err := newBrowser()
-	if err != nil {
-		return nil, err
-	}
+	b := newBrowser()
 	defer b.Close()
 
 	page := b.NewPage()
@@ -496,7 +478,7 @@ func (s *ZhipinService) StopCron(ctx context.Context, taskID int) error {
 
 // 辅助函数
 
-func newBrowser() (*headless_browser.Browser, error) {
+func newBrowser() *headless_browser.Browser {
 	return browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
 }
 

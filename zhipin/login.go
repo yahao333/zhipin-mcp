@@ -2,8 +2,8 @@ package zhipin
 
 import (
 	"context"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -138,9 +138,12 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 		return false, errors.Wrap(err, "check login status failed")
 	}
 
+	logrus.Debugf("user is logged in: %v", exists)
 	if exists {
 		return true, nil
 	}
+
+	logrus.Debugf("user is not logged in")
 
 	// 检查是否有登录按钮（未登录）
 	exists, _, err = pp.Has(".btn-login, .login-btn")
@@ -148,17 +151,21 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 		return false, errors.Wrap(err, "check login status failed")
 	}
 
+	logrus.Debugf("login button exists: %v", exists)
+
 	// 有登录按钮说明未登录
 	return !exists, nil
 }
 
 // FetchQrcodeImage 获取登录二维码
 func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
+	logrus.Debugf("fetch qrcode image")
 	// 访问BOSS直聘登录页
 	pp, err := navigateAndWait(ctx, l.page, "https://www.zhipin.com/user/login.html")
 	if err != nil {
 		return "", false, err
 	}
+	logrus.Debugf("login page loaded")
 
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)

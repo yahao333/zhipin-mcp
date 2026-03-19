@@ -2,6 +2,9 @@ package zhipin
 
 import (
 	"context"
+	"encoding/base64"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -215,6 +218,106 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 	}
 
 	return *src, false, nil
+}
+
+// FetchQrcodeImageAsBase64 获取登录二维码图片（返回 base64）
+func (l *Login) FetchQrcodeImageAsBase64(ctx context.Context) (string, bool, error) {
+	// 1. 获取相对路径（复用现有逻辑）
+	src, loggedIn, err := l.fetchQrcodeSrc(ctx)
+	if err != nil || loggedIn {
+		return "", loggedIn, err
+	}
+
+	// 2. 拼接完整 URL
+	fullURL := "https://www.zhipin.com" + src
+
+	// 3. 下载图片
+	imgData, err := l.downloadImage(ctx, fullURL)
+	if err != nil {
+		return "", false, errors.Wrap(err, "download qrcode image failed")
+	}
+
+	// 4. 转换为 base64
+	base64Str := base64.StdEncoding.EncodeToString(imgData)
+	base64WithPrefix := "data:image/png;base64," + base64Str
+
+	return base64WithPrefix, false, nil
+}
+
+// fetchQrcodeSrc 内部方法：获取二维码相对路径
+func (l *Login) fetchQrcodeSrc(ctx context.Context) (string, bool, error) {
+	// 访问BOSS直聘登录页
+	pp, err := navigateAndWait(ctx, l.page, "https://www.zhipin.com/user/login.html")
+	if err != nil {
+		return "", false, err
+	}
+
+	// 等待二维码加载
+	time.Sleep(5 * time.Second)
+
+	// 检查是否已经登录
+	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
+	if err != nil {
+		return "", false, err
+	}
+	if exists {
+		return "", true, nil
+	}
+
+	// 获取二维码相对路径
+	selectors := []string{
+		".qr-code-box .qr-img-box img",
+		".qr-img-box img",
+		".qrcode img",
+		".login-qrcode img",
+		"#qrcode img",
+		"[class*='qrcode'] img",
+	}
+	var el *rod.Element
+
+	for _, sel := range selectors {
+		el, err = pp.Timeout(5 * time.Second).Element(sel)
+		if err == nil {
+			break
+		}
+	}
+
+	if el == nil || err != nil {
+		return "", false, errors.Wrap(err, "get qrcode failed")
+	}
+
+	src, err := el.Attribute("src")
+	if err != nil || src == nil || len(*src) == 0 {
+		return "", false, errors.New("qrcode src is empty")
+	}
+
+	return *src, false, nil
+}
+
+// downloadImage 下载图片
+func (l *Login) downloadImage(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// 添加必要的请求头
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
 }
 
 // WaitForLogin 等待扫码登录成功

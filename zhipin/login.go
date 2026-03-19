@@ -176,6 +176,7 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 
 	// 检查是否已经登录
 	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
+	logrus.Debugf("user is logged in: %v %v", exists, err)
 	if err != nil {
 		return "", false, errors.Wrap(err, "check login status failed")
 	}
@@ -183,8 +184,15 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 		return "", true, nil
 	}
 
-	// 获取二维码图片 - 尝试多个选择器
-	selectors := []string{".qr-code-box .qr-img-box", ".qrcode img", ".login-qrcode img", "#qrcode", ".qrcode", "[class*='qrcode'] img"}
+	// 获取二维码图片 - 尝试多个选择器（优先选择 img 标签）
+	selectors := []string{
+		".qr-code-box .qr-img-box img",
+		".qr-img-box img",
+		".qrcode img",
+		".login-qrcode img",
+		"#qrcode img",
+		"[class*='qrcode'] img",
+	}
 	var el *rod.Element
 
 	for _, sel := range selectors {

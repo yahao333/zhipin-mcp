@@ -146,7 +146,7 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 	logrus.Debugf("user is not logged in")
 
 	// 检查是否有登录按钮（未登录）
-	exists, _, err = pp.Has(".btn-login, .login-btn")
+	exists, _, err = pp.Has(".btns .header-login-btn")
 	if err != nil {
 		return false, errors.Wrap(err, "check login status failed")
 	}

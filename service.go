@@ -79,8 +79,8 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 		}, nil
 	}
 
-	// 未登录，获取二维码
-	img, loggedIn, err := loginAction.FetchQrcodeImage(ctx)
+	// 未登录，获取二维码（返回 base64）
+	img, loggedIn, err := loginAction.FetchQrcodeImageAsBase64(ctx)
 	if err != nil || loggedIn {
 		defer deferFunc()
 	}

@@ -2,6 +2,7 @@ package zhipin
 
 import (
 	"context"
+	"sync"
 	"strings"
 	"time"
 
@@ -16,15 +17,95 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 
 	logrus.WithField("url", url).Debug("navigate start")
 
+	type redirectHop struct {
+		From   string
+		To     string
+		Status int
+	}
+
+	var (
+		mu        sync.Mutex
+		redirects []redirectHop
+	)
+
+	monitorPage, cancelMonitor := pp.WithCancel()
+	go monitorPage.EachEvent(func(e *proto.NetworkRequestWillBeSent) {
+		if e == nil || e.RedirectResponse == nil {
+			return
+		}
+		mu.Lock()
+		redirects = append(redirects, redirectHop{
+			From:   e.RedirectResponse.URL,
+			To:     e.Request.URL,
+			Status: e.RedirectResponse.Status,
+		})
+		mu.Unlock()
+	})()
+
 	waitNav := pp.WaitNavigation(proto.PageLifecycleEventNameDOMContentLoaded)
 	if err := pp.Navigate(url); err != nil {
+		cancelMonitor()
 		return nil, errors.Wrapf(err, "navigate to %s failed", url)
 	}
 	waitNav()
 
 	pp.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)()
 
-	logrus.WithField("url", url).Debug("navigate done")
+	cancelMonitor()
+
+	info, err := pp.Info()
+	if err != nil {
+		return nil, errors.Wrap(err, "get page info failed")
+	}
+
+	mu.Lock()
+	redirectCount := len(redirects)
+	redirectCopy := make([]redirectHop, redirectCount)
+	copy(redirectCopy, redirects)
+	mu.Unlock()
+
+	finalURL := info.URL
+	isRedirected := !strings.HasPrefix(finalURL, url)
+
+	isAntiBot := false
+	reason := ""
+	suspiciousKeywords := []string{
+		"captcha",
+		"verify",
+		"geetest",
+		"challenge",
+		"security",
+		"risk",
+		"validate",
+		"robot",
+	}
+	lowerFinalURL := strings.ToLower(finalURL)
+	lowerTitle := strings.ToLower(info.Title)
+	for _, kw := range suspiciousKeywords {
+		if strings.Contains(lowerFinalURL, kw) || strings.Contains(lowerTitle, kw) {
+			isAntiBot = true
+			reason = kw
+			break
+		}
+	}
+	if !isAntiBot {
+		if strings.Contains(info.Title, "验证") || strings.Contains(info.Title, "安全") || strings.Contains(info.Title, "机器人") {
+			isAntiBot = true
+			reason = "title"
+		}
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"url":            url,
+		"final_url":      finalURL,
+		"title":          info.Title,
+		"redirected":     isRedirected,
+		"redirect_count": redirectCount,
+		"anti_bot":       isAntiBot,
+		"anti_bot_hint":  reason,
+		"redirects":      redirectCopy,
+	}).Debug("navigate done")
+
 	return pp, nil
 }
 

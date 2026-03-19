@@ -178,8 +178,8 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 
 	debug.WritePageHTMLToFile(pp, "data.html")
 
-	// 检查是否已经登录（登录成功后有 .nav-figure 或 .user-nav）
-	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
+	// 检查是否已经登录
+	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
 	logrus.Debugf("user is logged in: %v %v", exists, err)
 	if err != nil {
 		return "", false, errors.Wrap(err, "check login status failed")
@@ -256,8 +256,8 @@ func (l *Login) fetchQrcodeSrc(ctx context.Context) (string, bool, error) {
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)
 
-	// 检查是否已经登录（登录成功后有 .nav-figure 或 .user-nav）
-	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
+	// 检查是否已经登录
+	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
 	if err != nil {
 		return "", false, err
 	}
@@ -337,6 +337,15 @@ func (l *Login) WaitForLogin(ctx context.Context) bool {
 			exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
 			logrus.Debugf("scan login -> %v", exists)
 			if err == nil && exists {
+				// 进一步检查 .nav-figure a span 的文本是否以"杨"开头
+				if el := pp.MustElement(".nav-figure a span.label-text"); el != nil {
+					text, err := el.Text()
+					if err == nil && strings.HasPrefix(text, "杨") {
+						logrus.Debugf("登录成功检测到用户名: %s", text)
+						return true
+					}
+				}
+				// 如果没有找到特定用户名元素，但有 .nav-figure 也认为登录成功
 				return true
 			}
 		}

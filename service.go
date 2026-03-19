@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -86,6 +89,13 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// 保存二维码到文件用于调试
+	if err := saveQrcodeImage(img); err != nil {
+		logrus.Warnf("保存二维码图片失败: %v", err)
+	} else {
+		logrus.Info("二维码图片已保存到 qrcode.png")
 	}
 
 	timeout := 4 * time.Minute
@@ -496,6 +506,29 @@ func saveCookies(page *rod.Page) error {
 
 	cookieLoader := cookies.NewLoadCookie(cookies.GetCookiesFilePath())
 	return cookieLoader.SaveCookies(data)
+}
+
+// saveQrcodeImage 保存二维码图片到文件（用于调试）
+func saveQrcodeImage(base64Data string) error {
+	// 解析 base64 数据（去除 data:image/png;base64, 前缀）
+	prefix := "data:image/png;base64,"
+	if len(base64Data) <= len(prefix) {
+		return nil
+	}
+
+	imgData, err := base64.StdEncoding.DecodeString(base64Data[len(prefix):])
+	if err != nil {
+		return err
+	}
+
+	// 保存到当前目录的 qrcode.png
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	path := filepath.Join(dir, "qrcode.png")
+	return os.WriteFile(path, imgData, 0644)
 }
 
 func randomDelay() {

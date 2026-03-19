@@ -138,7 +138,8 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 	time.Sleep(1 * time.Second)
 
 	// 检查是否已登录（通过检查用户头像或用户名元素）
-	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
+	// 登录成功后有 <div class="user-nav"> 下的 <li class="nav-figure">
+	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
 	if err != nil {
 		return false, errors.Wrap(err, "check login status failed")
 	}
@@ -177,8 +178,8 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 
 	debug.WritePageHTMLToFile(pp, "data.html")
 
-	// 检查是否已经登录
-	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
+	// 检查是否已经登录（登录成功后有 .nav-figure 或 .user-nav）
+	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
 	logrus.Debugf("user is logged in: %v %v", exists, err)
 	if err != nil {
 		return "", false, errors.Wrap(err, "check login status failed")
@@ -255,8 +256,8 @@ func (l *Login) fetchQrcodeSrc(ctx context.Context) (string, bool, error) {
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)
 
-	// 检查是否已经登录
-	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
+	// 检查是否已经登录（登录成功后有 .nav-figure 或 .user-nav）
+	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
 	if err != nil {
 		return "", false, err
 	}
@@ -332,7 +333,9 @@ func (l *Login) WaitForLogin(ctx context.Context) bool {
 			return false
 		case <-ticker.C:
 			// 检查是否出现用户头像或用户名元素，表示登录成功
-			exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
+			// 从 HTML 分析：登录成功后有 <div class="user-nav"> 下的 <li class="nav-figure">
+			exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
+			logrus.Debugf("scan login -> %v", exists)
 			if err == nil && exists {
 				return true
 			}

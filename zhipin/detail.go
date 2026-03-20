@@ -2,11 +2,13 @@ package zhipin
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 // Detail 职位详情操作
@@ -63,6 +65,9 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 		UpdatedAt: time.Now(),
 	}
 
+	time.Sleep(5 * time.Second)
+	debug.WritePageHTMLToFile(d.page, "detail.html")
+
 	// 获取职位标题
 	logrus.Debugf("[Detail.parseJobDetail] 查找职位标题 .job-title")
 	titleEl, err := d.page.Element(".job-title")
@@ -84,14 +89,22 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 	}
 
 	// 获取公司名称
-	logrus.Debugf("[Detail.parseJobDetail] 查找公司名称 .company-name a")
-	companyEl, err := d.page.Element(".company-name a")
+	// 支持两种格式：代招职位 (.brand-name) 和普通职位 (.company-name)
+	logrus.Debugf("[Detail.parseJobDetail] 查找公司名称")
+	companyName := ""
+
+	// 先尝试代招职位格式 .brand-name（避免 Element 长时间等待）
+	brandEl, err := d.page.Element(".brand-name")
 	if err == nil {
-		job.CompanyName, _ = companyEl.Text()
-		logrus.Debugf("[Detail.parseJobDetail] 公司名称: %s", job.CompanyName)
+		companyName, _ = brandEl.Text()
+		logrus.Debugf("[Detail.parseJobDetail] 找到代招职位公司名称原始文本: %s", companyName)
+		// 去掉"代招公司："前缀
+		companyName = strings.TrimPrefix(companyName, "代招公司：")
+		logrus.Debugf("[Detail.parseJobDetail] 去掉前缀后的公司名称: %s", companyName)
 	} else {
-		logrus.Warnf("[Detail.parseJobDetail] 未找到公司名称元素: %v", err)
+		logrus.Warnf("[Detail.parseJobDetail] 未找到代招职位公司名称元素: %v", err)
 	}
+	job.CompanyName = companyName
 
 	// 获取HR信息
 	logrus.Debugf("[Detail.parseJobDetail] 查找HR信息 .hr-name")

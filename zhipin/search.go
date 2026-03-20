@@ -383,30 +383,40 @@ func (s *Search) parseJobCard(card *rod.Element) (Job, error) {
 	}
 
 	// 获取职位标题 - 尝试多个选择器
+	// 注意：.job-title 元素同时包含职位名称和薪资，需要拆分
 	titleEl, err := card.Element(".job-title")
 	if err == nil {
-		job.Title, _ = titleEl.Text()
+		// 使用 innerText 获取渲染后的完整文本（包含职位名称和薪资）
+		titleResult, titleErr := titleEl.Eval("el => el.innerText")
+		if titleErr == nil && titleResult != nil {
+			fullTitle := titleResult.Value.Str()
+
+			// 先获取薪资（使用 innerText 处理字体图标）
+			salaryEl, salaryErr := card.Element(".job-salary")
+			if salaryErr == nil {
+				salaryResult, _ := salaryEl.Eval("el => el.innerText")
+				if salaryResult != nil {
+					job.SalaryRange = salaryResult.Value.Str()
+				}
+			}
+
+			// 从 title 中移除薪资部分（薪资通常在最后，以换行符分隔）
+			if job.SalaryRange != "" {
+				// 移除薪资部分（包括换行符）
+				job.Title = strings.TrimSuffix(fullTitle, "\n"+job.SalaryRange)
+			} else {
+				job.Title = fullTitle
+			}
+		} else {
+			// 备用方案：使用普通 Text 方法
+			job.Title, _ = titleEl.Text()
+		}
 	}
 
 	// 获取公司名称 - 尝试 .boss-name
 	companyEl, err := card.Element(".boss-name")
 	if err == nil {
 		job.CompanyName, _ = companyEl.Text()
-	}
-
-	// 获取薪资 - 尝试 .job-salary
-	// 使用 JavaScript 获取实际渲染的文本（可以正确处理字体图标）
-	salaryEl, err := card.Element(".job-salary")
-	if err == nil {
-		// 使用 JS 获取 innerText 而不是 textContent，可以正确处理字体图标
-		salaryResult, err := salaryEl.Eval("el => el.innerText")
-		if err == nil && salaryResult != nil {
-			job.SalaryRange = salaryResult.Value.Str()
-		} else {
-			// 备用方案：使用普通 Text 方法
-			salaryText, _ := salaryEl.Text()
-			job.SalaryRange = convertSalaryIcon(salaryText)
-		}
 	}
 
 	// 获取城市/地点 - 尝试 .company-location

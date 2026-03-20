@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/zhipin-mcp/cookies"
+	"github.com/yahao333/zhipin-mcp/cookies"
 )
 
 // MCP 工具处理函数

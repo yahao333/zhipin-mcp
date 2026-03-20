@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/xpzouying/zhipin-mcp/pkg/debug"
+	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page, error) {

@@ -7,7 +7,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/configs"
 )
 
 // Search 搜索操作

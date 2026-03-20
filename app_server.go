@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/zhipin-mcp/configs"
-	"github.com/xpzouying/zhipin-mcp/zhipin"
+	"github.com/yahao333/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/zhipin"
 )
 
 // AppServer 应用服务器

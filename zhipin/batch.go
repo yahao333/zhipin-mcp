@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/configs"
 )
 
 // Batch 批量投递操作

@@ -1,4 +1,4 @@
-module github.com/xpzouying/zhipin-mcp
+module github.com/yahao333/zhipin-mcp
 
 go 1.25.0
 

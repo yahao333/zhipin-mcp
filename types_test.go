@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xpzouying/zhipin-mcp/zhipin"
+	"github.com/yahao333/zhipin-mcp/zhipin"
 )
 
 // TestConvertJob 测试职位类型转换

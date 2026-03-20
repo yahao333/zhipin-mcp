@@ -12,10 +12,10 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/sirupsen/logrus"
 	"github.com/xpzouying/headless_browser"
-	"github.com/xpzouying/zhipin-mcp/browser"
-	"github.com/xpzouying/zhipin-mcp/configs"
-	"github.com/xpzouying/zhipin-mcp/cookies"
-	"github.com/xpzouying/zhipin-mcp/zhipin"
+	"github.com/yahao333/zhipin-mcp/browser"
+	"github.com/yahao333/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/cookies"
+	"github.com/yahao333/zhipin-mcp/zhipin"
 )
 
 // ZhipinService BOSS直聘业务服务

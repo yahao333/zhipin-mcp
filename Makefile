@@ -7,7 +7,7 @@ GO_RUN=$(GO_CMD) run
 GO_TEST=$(GO_CMD) test
 GO_VET=$(GO_CMD) vet
 GO_LINT=golangci-lint
-PKG=github.com/xpzouying/zhipin-mcp
+PKG=github.com/yahao333/zhipin-mcp
 VERSION=$(shell git describe --tags --always --dirty)
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"

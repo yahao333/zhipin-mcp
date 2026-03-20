@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/configs"
 )
 
 func main() {

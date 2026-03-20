@@ -10,7 +10,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/configs"
 )
 
 var db *sql.DB

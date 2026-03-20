@@ -78,14 +78,17 @@ func (s *MCPServer) GetTools() []Tool {
 		{
 			Name:        "check_login_status",
 			Description: "检查当前登录状态",
+			InputSchema: map[string]interface{}{"type": "object"},
 		},
 		{
 			Name:        "get_login_qrcode",
 			Description: "获取登录二维码，用于扫码登录BOSS直聘",
+			InputSchema: map[string]interface{}{"type": "object"},
 		},
 		{
 			Name:        "delete_cookies",
 			Description: "删除Cookie并重置登录状态",
+			InputSchema: map[string]interface{}{"type": "object"},
 		},
 		{
 			Name:        "search_jobs",
@@ -180,6 +183,7 @@ func (s *MCPServer) GetTools() []Tool {
 		{
 			Name:        "get_config",
 			Description: "获取当前配置",
+			InputSchema: map[string]interface{}{"type": "object"},
 		},
 		{
 			Name:        "update_config",
@@ -196,6 +200,7 @@ func (s *MCPServer) GetTools() []Tool {
 		{
 			Name:        "get_stats",
 			Description: "获取投递统计",
+			InputSchema: map[string]interface{}{"type": "object"},
 		},
 	}
 }

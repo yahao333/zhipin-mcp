@@ -327,21 +327,58 @@ func (s *Search) parseSearchResults(page, pageSize int) (*SearchResult, error) {
 	return result, nil
 }
 
+// extractJobIDFromHref 从 href 中提取 jobID
+// URL 格式: /job_detail/b7514bae474aa1ce0nZ72tq9GFZY.html
+func extractJobIDFromHref(href string) string {
+	if href == "" {
+		return ""
+	}
+	if idx := strings.Index(href, "/job_detail/"); idx >= 0 {
+		pathPart := href[idx+len("/job_detail/"):]
+		if extIdx := strings.Index(pathPart, ".html"); extIdx >= 0 {
+			return pathPart[:extIdx]
+		}
+	}
+	return ""
+}
+
 // parseJobCard 解析职位卡片
 func (s *Search) parseJobCard(card *rod.Element) (Job, error) {
 	job := Job{
 		UpdatedAt: time.Now(),
 	}
 
-	// 获取职位ID
+	// 获取职位ID - 优先从 data-jobid 获取，否则从 URL 路径提取
 	jobID, _ := card.Attribute("data-jobid")
-	if jobID != nil {
+	if jobID == nil || *jobID == "" {
+		// 尝试从链接的 href 中提取 jobID
+		linkEl, err := card.Element(".job-name")
+		if err == nil {
+			href, _ := linkEl.Attribute("href")
+			if href != nil && *href != "" {
+				job.ID = extractJobIDFromHref(*href)
+			}
+		}
+	} else {
 		job.ID = *jobID
 	}
 
-	// 尝试从data-job-url获取URL
+	// 获取职位URL - 优先从 data-job-url，否则从链接 href 获取
 	jobURL, _ := card.Attribute("data-job-url")
-	if jobURL != nil {
+	if jobURL == nil || *jobURL == "" {
+		// 从链接获取
+		linkEl, err := card.Element(".job-name")
+		if err == nil {
+			href, _ := linkEl.Attribute("href")
+			if href != nil && *href != "" {
+				if !strings.HasPrefix(*href, "http") {
+					job.URL = "https://www.zhipin.com" + *href
+				} else {
+					job.URL = *href
+				}
+			}
+		}
+	} else {
 		job.URL = "https://www.zhipin.com" + *jobURL
 	}
 
@@ -408,19 +445,6 @@ func (s *Search) parseJobCard(card *rod.Element) (Job, error) {
 		// 公司规模通常在描述中，如"100-999人"
 		if strings.Contains(companyInfo, "人") {
 			job.CompanySize = strings.TrimSpace(companyInfo)
-		}
-	}
-
-	// 获取职位详情URL - 尝试从 a 标签的 href 获取
-	linkEl, err := card.Element("a")
-	if err == nil {
-		href, _ := linkEl.Attribute("href")
-		if href != nil && *href != "" {
-			if !strings.HasPrefix(*href, "http") {
-				job.URL = "https://www.zhipin.com" + *href
-			} else {
-				job.URL = *href
-			}
 		}
 	}
 

@@ -395,9 +395,18 @@ func (s *Search) parseJobCard(card *rod.Element) (Job, error) {
 	}
 
 	// 获取薪资 - 尝试 .job-salary
+	// 使用 JavaScript 获取实际渲染的文本（可以正确处理字体图标）
 	salaryEl, err := card.Element(".job-salary")
 	if err == nil {
-		job.SalaryRange, _ = salaryEl.Text()
+		// 使用 JS 获取 innerText 而不是 textContent，可以正确处理字体图标
+		salaryResult, err := salaryEl.Eval("el => el.innerText")
+		if err == nil && salaryResult != nil {
+			job.SalaryRange = salaryResult.Value.Str()
+		} else {
+			// 备用方案：使用普通 Text 方法
+			salaryText, _ := salaryEl.Text()
+			job.SalaryRange = convertSalaryIcon(salaryText)
+		}
 	}
 
 	// 获取城市/地点 - 尝试 .company-location
@@ -510,6 +519,39 @@ func getPageState(page *rod.Page) string {
 
 	return fmt.Sprintf("url=%s, title=%s, bodyExists=%s, readyState=%s",
 		url, title, bodyExists, readyState)
+}
+
+// salaryIconMap BOSS直聘薪资字体图标到数字的映射
+// BOSS直聘使用 Unicode 私有区域(E000-F8FF)的字符来显示薪资数字
+// 根据实际测试结果映射：
+// =2, =1, =3, =4, =5, =6, =7, =9, =8
+var salaryIconMap = map[rune]rune{
+	'': '0',
+	'': '1',
+	'': '2',
+	'': '3',
+	'': '4',
+	'': '5',
+	'': '6',
+	'': '7',
+	'': '8',
+	'': '9',
+}
+
+// convertSalaryIcon 将薪资字符串中的字体图标转换为正常数字
+func convertSalaryIcon(salary string) string {
+	if salary == "" {
+		return salary
+	}
+	var result []rune
+	for _, r := range salary {
+		if mapped, ok := salaryIconMap[r]; ok {
+			result = append(result, mapped)
+		} else {
+			result = append(result, r)
+		}
+	}
+	return string(result)
 }
 
 // randomDelay 随机延时

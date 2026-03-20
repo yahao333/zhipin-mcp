@@ -283,7 +283,7 @@ help:
 	@echo "  api-login-qrcode-br  扫码登录 (显示浏览器窗口)"
 	@echo "  api-login-delete     删除 cookies"
 	@echo "  api-search           搜索职位"
-	@echo "  api-job-detail       职位详情"
+	@echo "  api-job-detail       职位详情 (需 ID 参数)"
 	@echo "  api-deliver          投递简历"
 	@echo "  api-batch-deliver   批量投递"
 	@echo "  api-delivered        已投递列表"
@@ -342,12 +342,16 @@ api-search:
 		-H "Content-Type: application/json" \
 		-d '{"keyword": "Go开发"}'
 
-# 职位详情
+# 职位详情 (用法: make api-job-detail ID=实际job_id)
 .PHONY: api-job-detail
 api-job-detail:
 	@echo "==> 职位详情"
-	@echo "注意: job_id 需要替换为真实 ID"
-	curl -s $(API_BASE)/api/jobs/job123456
+	@if [ -z "$(ID)" ]; then \
+		echo "用法: make api-job-detail ID=job_id"; \
+		echo "示例: make api-job-detail ID=job123456"; \
+		exit 1; \
+	fi
+	curl -s $(API_BASE)/api/jobs/$(ID)
 
 # 投递简历
 .PHONY: api-deliver

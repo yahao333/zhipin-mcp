@@ -44,4 +44,3 @@ func WritePageHTMLToFile(page HTMLProvider, filename string) {
 		"size": len(html),
 	}).Debug("page html written to file")
 }
-

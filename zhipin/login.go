@@ -339,15 +339,14 @@ func (l *Login) WaitForLogin(ctx context.Context) bool {
 			exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
 			logrus.Debugf("scan login -> %v", exists)
 			if err == nil && exists {
-				// 进一步检查 .nav-figure a span 的文本是否以"杨"开头
+				// 检查用户名元素是否有有效文本
 				if el := pp.MustElement(".nav-figure a span.label-text"); el != nil {
-					text, err := el.Text()
-					if err == nil && strings.HasPrefix(text, "杨") {
+					if text, err := el.Text(); err == nil && len(text) > 0 {
 						logrus.Debugf("登录成功检测到用户名: %s", text)
 						return true
 					}
 				}
-				// 如果没有找到特定用户名元素，但有 .nav-figure 也认为登录成功
+				// 如果没有找到用户名元素但有用户元素存在，也认为登录成功
 				return true
 			}
 		}

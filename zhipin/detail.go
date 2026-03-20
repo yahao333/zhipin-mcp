@@ -89,20 +89,38 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 	}
 
 	// 获取公司名称
-	// 支持两种格式：代招职位 (.brand-name) 和普通职位 (.company-name)
+	// 优先从侧边栏获取: .sider-company .company-info a[title]
+	// 备选: 代招职位 (.brand-name)
 	logrus.Debugf("[Detail.parseJobDetail] 查找公司名称")
 	companyName := ""
 
-	// 先尝试代招职位格式 .brand-name（避免 Element 长时间等待）
-	brandEl, err := d.page.Element(".brand-name")
+	// 使用 Timeout 设置 3 秒超时
+	pageWithTimeout := d.page.Timeout(3 * time.Second)
+
+	// 优先从侧边栏获取公司名称
+	companyEl, err := pageWithTimeout.Element(".company-info a[title]")
 	if err == nil {
-		companyName, _ = brandEl.Text()
-		logrus.Debugf("[Detail.parseJobDetail] 找到代招职位公司名称原始文本: %s", companyName)
-		// 去掉"代招公司："前缀
-		companyName = strings.TrimPrefix(companyName, "代招公司：")
-		logrus.Debugf("[Detail.parseJobDetail] 去掉前缀后的公司名称: %s", companyName)
+		// 使用 title 属性获取公司名称（因为 a 标签内可能没有直接文本）
+		title, _ := companyEl.Attribute("title")
+		if title != nil {
+			companyName = strings.TrimSpace(*title)
+			logrus.Debugf("[Detail.parseJobDetail] 从侧边栏找到公司名称: %s", companyName)
+		}
 	} else {
-		logrus.Warnf("[Detail.parseJobDetail] 未找到代招职位公司名称元素: %v", err)
+		logrus.Warnf("[Detail.parseJobDetail] 从侧边栏未找到公司名称: %v", err)
+		// 备选: 尝试代招职位格式 .brand-name
+		if companyName == "" {
+			brandEl, err := d.page.Element(".brand-name")
+			if err == nil {
+				companyName, _ = brandEl.Text()
+				logrus.Debugf("[Detail.parseJobDetail] 找到代招职位公司名称原始文本: %s", companyName)
+				// 去掉"代招公司："前缀
+				companyName = strings.TrimPrefix(companyName, "代招公司：")
+				logrus.Debugf("[Detail.parseJobDetail] 去掉前缀后的公司名称: %s", companyName)
+			} else {
+				logrus.Warnf("[Detail.parseJobDetail] 未找到代招职位公司名称元素: %v", err)
+			}
+		}
 	}
 	job.CompanyName = companyName
 

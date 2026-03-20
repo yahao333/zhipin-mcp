@@ -299,59 +299,97 @@ func (s *ZhipinService) GetJobDetail(ctx context.Context, jobID string) (*JobDet
 
 // DeliverJob 投递简历
 func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) (*DeliverJobResponse, error) {
-	// 检查每日投递上限
+	logrus.Debugf("[Service.DeliverJob] ========== 开始投递流程 ==========")
+	logrus.Debugf("[Service.DeliverJob] JobID: %s", req.JobID)
+
+	// 步骤1: 检查每日投递上限
+	logrus.Debugf("[Service.DeliverJob] 步骤1: 检查每日投递上限")
 	count, err := GetTodayDeliveredCount()
 	if err != nil {
+		logrus.Errorf("[Service.DeliverJob] 获取今日投递数失败: %v", err)
 		return nil, err
 	}
+	logrus.Debugf("[Service.DeliverJob] 今日已投递: %d, 上限: %d", count, configs.MaxDaily)
 	if count >= configs.MaxDaily {
+		logrus.Warnf("[Service.DeliverJob] 今日投递已达上限: %d/%d", count, configs.MaxDaily)
 		return &DeliverJobResponse{
 			JobID:   req.JobID,
 			Success: false,
 			Message: "今日投递已达上限",
 		}, nil
 	}
+	logrus.Debugf("[Service.DeliverJob] 每日投递检查通过")
 
-	// 检查是否已投递
+	// 步骤2: 检查是否已投递
+	logrus.Debugf("[Service.DeliverJob] 步骤2: 检查是否已投递")
 	isDelivered, err := IsJobDelivered(req.JobID)
 	if err != nil {
-		logrus.Warnf("检查投递状态失败: %v", err)
+		logrus.Warnf("[Service.DeliverJob] 检查投递状态失败: %v", err)
 	}
 	if isDelivered {
+		logrus.Warnf("[Service.DeliverJob] 该职位已投递过: %s", req.JobID)
 		return &DeliverJobResponse{
 			JobID:   req.JobID,
 			Success: false,
 			Message: "该职位已投递过",
 		}, nil
 	}
+	logrus.Debugf("[Service.DeliverJob] 未投递过，可以投递")
 
-	// 投递
+	// 步骤3: 初始化浏览器
+	logrus.Debugf("[Service.DeliverJob] 步骤3: 初始化浏览器")
 	b := newBrowser()
 	defer b.Close()
+	logrus.Debugf("[Service.DeliverJob] 浏览器初始化完成")
 
+	// 步骤4: 创建页面
+	logrus.Debugf("[Service.DeliverJob] 步骤4: 创建浏览器页面")
 	page := b.NewPage()
 	defer page.Close()
+	logrus.Debugf("[Service.DeliverJob] 页面创建完成")
 
+	// 步骤5: 执行投递
+	logrus.Debugf("[Service.DeliverJob] 步骤5: 执行投递")
 	deliverAction := zhipin.NewDeliver(page)
 	result, err := deliverAction.DeliverJob(ctx, req.JobID)
 	if err != nil {
+		logrus.Errorf("[Service.DeliverJob] 投递执行失败: %v", err)
 		return nil, err
 	}
+	logrus.Debugf("[Service.DeliverJob] 投递执行完成, 结果: Success=%v, Message=%s", result.Success, result.Message)
 
-	// 保存投递记录
+	// 步骤6: 保存投递记录
+	logrus.Debugf("[Service.DeliverJob] 步骤6: 保存投递记录")
 	if result.Success {
+		logrus.Debugf("[Service.DeliverJob] 投递成功，保存记录")
 		appliedJob := &AppliedJob{
 			JobID:     req.JobID,
 			JobTitle:  result.Message,
 			Status:    "success",
 			AppliedAt: time.Now(),
 		}
-		_ = SaveAppliedJob(appliedJob)
-		_ = UpdateDeliveryStats(true)
+		err = SaveAppliedJob(appliedJob)
+		if err != nil {
+			logrus.Errorf("[Service.DeliverJob] 保存投递记录失败: %v", err)
+		} else {
+			logrus.Debugf("[Service.DeliverJob] 投递记录保存成功")
+		}
+
+		err = UpdateDeliveryStats(true)
+		if err != nil {
+			logrus.Errorf("[Service.DeliverJob] 更新统计失败: %v", err)
+		} else {
+			logrus.Debugf("[Service.DeliverJob] 统计更新成功")
+		}
 	} else {
-		_ = UpdateDeliveryStats(false)
+		logrus.Warnf("[Service.DeliverJob] 投递失败，更新失败统计")
+		err = UpdateDeliveryStats(false)
+		if err != nil {
+			logrus.Errorf("[Service.DeliverJob] 更新失败统计失败: %v", err)
+		}
 	}
 
+	logrus.Debugf("[Service.DeliverJob] ========== 投递流程完成 ==========")
 	return &DeliverJobResponse{
 		JobID:   req.JobID,
 		Success: result.Success,
@@ -381,17 +419,25 @@ func (s *ZhipinService) DeliveredList(ctx context.Context, limit, offset int) (*
 
 // BatchDeliver 批量投递
 func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*BatchDeliverResponse, error) {
+	logrus.Debugf("[Service.BatchDeliver] ========== 开始批量投递 ==========")
+	logrus.Debugf("[Service.BatchDeliver] 总数: %d", len(jobIDs))
+
 	response := &BatchDeliverResponse{
 		Total:   len(jobIDs),
 		Results: []DeliverJobResponse{},
 	}
 
-	// 获取今日已投递数量
+	// 步骤1: 获取今日已投递数量
+	logrus.Debugf("[Service.BatchDeliver] 步骤1: 获取今日已投递数量")
 	todayCount, err := GetTodayDeliveredCount()
 	if err != nil {
+		logrus.Errorf("[Service.BatchDeliver] 获取今日投递数失败: %v", err)
 		return nil, err
 	}
+	logrus.Debugf("[Service.BatchDeliver] 今日已投递: %d, 上限: %d", todayCount, configs.MaxDaily)
 
+	// 步骤2: 初始化浏览器
+	logrus.Debugf("[Service.BatchDeliver] 步骤2: 初始化浏览器")
 	b := newBrowser()
 	defer b.Close()
 
@@ -399,10 +445,17 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 	defer page.Close()
 
 	deliverAction := zhipin.NewDeliver(page)
+	logrus.Debugf("[Service.BatchDeliver] 浏览器初始化完成")
 
+	// 步骤3: 遍历投递
+	logrus.Debugf("[Service.BatchDeliver] 步骤3: 开始遍历投递")
 	for i, jobID := range jobIDs {
+		logrus.Debugf("[Service.BatchDeliver] 处理第 %d/%d 个职位: %s", i+1, len(jobIDs), jobID)
+
 		// 检查每日上限
+		logrus.Debugf("[Service.BatchDeliver] 检查每日上限: 已投 %d + 成功 %d >= 上限 %d", todayCount, response.Success, configs.MaxDaily)
 		if todayCount+response.Success >= configs.MaxDaily {
+			logrus.Warnf("[Service.BatchDeliver] 今日投递已达上限，停止投递")
 			response.Results = append(response.Results, DeliverJobResponse{
 				JobID:   jobID,
 				Success: false,
@@ -412,8 +465,10 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 		}
 
 		// 检查是否已投递
+		logrus.Debugf("[Service.BatchDeliver] 检查是否已投递: %s", jobID)
 		isDelivered, _ := IsJobDelivered(jobID)
 		if isDelivered {
+			logrus.Debugf("[Service.BatchDeliver] 该职位已投递过，跳过: %s", jobID)
 			response.Results = append(response.Results, DeliverJobResponse{
 				JobID:   jobID,
 				Success: false,
@@ -421,13 +476,17 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 			})
 			continue
 		}
+		logrus.Debugf("[Service.BatchDeliver] 未投递过，可以投递")
 
 		// 随机延时
+		logrus.Debugf("[Service.BatchDeliver] 执行随机延时 (3-8秒)")
 		randomDelay()
 
 		// 投递
+		logrus.Debugf("[Service.BatchDeliver] 执行投递: %s", jobID)
 		result, err := deliverAction.DeliverJobFromSearchList(jobID)
 		if err != nil {
+			logrus.Errorf("[Service.BatchDeliver] 投递异常: %v", err)
 			result = &zhipin.DeliverResult{
 				JobID:   jobID,
 				Success: false,
@@ -441,26 +500,37 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 			Message: result.Message,
 		})
 
+		// 保存投递记录
 		if result.Success {
+			logrus.Debugf("[Service.BatchDeliver] 投递成功，保存记录: %s", jobID)
 			response.Success++
 			todayCount++
 
-			// 保存投递记录
 			appliedJob := &AppliedJob{
 				JobID:     jobID,
 				JobTitle:  result.Message,
 				Status:    "success",
 				AppliedAt: time.Now(),
 			}
-			_ = SaveAppliedJob(appliedJob)
-			_ = UpdateDeliveryStats(true)
+			err = SaveAppliedJob(appliedJob)
+			if err != nil {
+				logrus.Errorf("[Service.BatchDeliver] 保存投递记录失败: %v", err)
+			}
+			err = UpdateDeliveryStats(true)
+			if err != nil {
+				logrus.Errorf("[Service.BatchDeliver] 更新统计失败: %v", err)
+			}
 		} else {
+			logrus.Warnf("[Service.BatchDeliver] 投递失败: %s - %s", jobID, result.Message)
 			response.Failed++
 			_ = UpdateDeliveryStats(false)
 		}
 
 		logrus.Infof("批量投递进度: %d/%d, 成功: %d, 失败: %d", i+1, len(jobIDs), response.Success, response.Failed)
 	}
+
+	logrus.Infof("[Service.BatchDeliver] 批量投递完成: 总数=%d, 成功=%d, 失败=%d", len(jobIDs), response.Success, response.Failed)
+	logrus.Debugf("[Service.BatchDeliver] ========== 批量投递完成 ==========")
 
 	return response, nil
 }

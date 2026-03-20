@@ -2,6 +2,7 @@ package zhipin
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -25,68 +26,181 @@ func NewSearch(page *rod.Page) *Search {
 
 // SearchJobs 搜索职位
 func (s *Search) SearchJobs(ctx context.Context, params SearchParams) (*SearchResult, error) {
-	logrus.Infof("搜索职位: keyword=%s, page=%d", params.Keyword, params.Page)
+	logrus.Infof("========== [DEBUG SearchJobs] 开始搜索职位 ==========")
+	logrus.Infof("[DEBUG SearchJobs] 搜索参数: keyword=%s, page=%d, pageSize=%d, district=%s",
+		params.Keyword, params.Page, params.PageSize, params.District)
 
-	// 先访问搜索页面
+	// ===== DEBUG: 步骤1 - 访问搜索页面 =====
+	logrus.Debugf("[DEBUG SearchJobs] 步骤1: 访问搜索页面 https://www.zhipin.com/web/geek/job")
 	err := s.page.Navigate("https://www.zhipin.com/web/geek/job")
 	if err != nil {
+		logrus.Errorf("[DEBUG SearchJobs] 访问搜索页失败: %v", err)
 		return nil, errors.Wrap(err, "访问搜索页失败")
 	}
+	logrus.Debugf("[DEBUG SearchJobs] 页面导航成功")
 
-	// 等待页面加载
+	// ===== DEBUG: 步骤2 - 等待页面加载 =====
+	logrus.Debugf("[DEBUG SearchJobs] 步骤2: 等待页面加载")
+	startWait := time.Now()
 	s.page.WaitLoad()
-	randomDelay()
+	logrus.Debugf("[DEBUG SearchJobs] 页面加载完成, 耗时: %v", time.Since(startWait))
 
-	// 执行搜索交互
+	// 获取页面加载后的状态
+	pageURLAfterNav := getPageURL(s.page)
+	pageTitleAfterNav := getPageTitle(s.page)
+	logrus.Debugf("[DEBUG SearchJobs] 导航后页面URL: %s", pageURLAfterNav)
+	logrus.Debugf("[DEBUG SearchJobs] 导航后页面标题: %s", pageTitleAfterNav)
+
+	// ===== DEBUG: 步骤3 - 随机延时 =====
+	logrus.Debugf("[DEBUG SearchJobs] 步骤3: 执行随机延时")
+	delayStart := time.Now()
+	randomDelay()
+	logrus.Debugf("[DEBUG SearchJobs] 随机延时完成, 耗时: %v", time.Since(delayStart))
+
+	// ===== DEBUG: 步骤4 - 执行搜索交互 =====
+	logrus.Debugf("[DEBUG SearchJobs] 步骤4: 执行搜索交互 performSearch")
+	searchStart := time.Now()
 	err = s.performSearch(params)
 	if err != nil {
+		logrus.Errorf("[DEBUG SearchJobs] 执行搜索交互失败: %v", err)
 		return nil, err
 	}
+	logrus.Debugf("[DEBUG SearchJobs] 执行搜索交互完成, 耗时: %v", time.Since(searchStart))
 
-	// 解析搜索结果
+	// 获取搜索后的页面状态
+	pageURLAfterSearch := getPageURL(s.page)
+	pageTitleAfterSearch := getPageTitle(s.page)
+	logrus.Debugf("[DEBUG SearchJobs] 搜索后页面URL: %s", pageURLAfterSearch)
+	logrus.Debugf("[DEBUG SearchJobs] 搜索后页面标题: %s", pageTitleAfterSearch)
+
+	// ===== DEBUG: 步骤5 - 解析搜索结果 =====
+	logrus.Debugf("[DEBUG SearchJobs] 步骤5: 解析搜索结果 parseSearchResults")
+	parseStart := time.Now()
 	result, err := s.parseSearchResults(params.Page, params.PageSize)
 	if err != nil {
+		logrus.Errorf("[DEBUG SearchJobs] 解析搜索结果失败: %v", err)
 		return nil, err
 	}
+	logrus.Debugf("[DEBUG SearchJobs] 解析搜索结果完成, 耗时: %v", time.Since(parseStart))
+
+	logrus.Infof("[DEBUG SearchJobs] 搜索完成! 共找到 %d 个职位", result.Total)
+	logrus.Infof("========== [DEBUG SearchJobs] 搜索职位结束 ==========")
 
 	return result, nil
 }
 
 // performSearch 执行搜索交互
 func (s *Search) performSearch(params SearchParams) error {
-	// 等待搜索输入框出现
-	inputEl, err := s.page.Element(".search-input")
-	if err != nil {
-		// 尝试其他可能的输入框选择器
-		inputEl, err = s.page.Element(".ka-input")
-		if err != nil {
-			return errors.Wrap(err, "找不到搜索输入框")
+	logrus.Debugf("[DEBUG performSearch] 开始执行搜索交互, 关键词: %s", params.Keyword)
+
+	// ===== DEBUG: 步骤1 - 查找搜索输入框 =====
+	logrus.Debugf("[DEBUG performSearch] 步骤1: 查找搜索输入框")
+
+	// 先获取页面当前状态
+	pageState := getPageState(s.page)
+	logrus.Debugf("[DEBUG performSearch] 页面当前状态: %s", pageState)
+
+	inputSelectors := []string{
+		".search-input-box .input",       // 搜索框容器内的input
+		".c-search-input .input",        // 搜索输入容器
+		"input.input[placeholder*='职位']", // 带placeholder的input
+		".search-input",                 // 旧选择器
+		".ka-input",                     // 旧选择器
+		"input[name='query']",           // 旧选择器
+		"#keyword",                      // 旧选择器
+		"input[placeholder*='职位']",    // 旧选择器
+	}
+	var inputEl *rod.Element
+	var err error
+
+	for _, selector := range inputSelectors {
+		logrus.Debugf("[DEBUG performSearch] 尝试选择器: %s", selector)
+		inputEl, err = s.page.Element(selector)
+		if err == nil {
+			logrus.Debugf("[DEBUG performSearch] 找到输入框: %s", selector)
+			break
 		}
+		logrus.Debugf("[DEBUG performSearch] 选择器 %s 未找到: %v", selector, err)
 	}
 
-	// 清空输入框并输入关键词
+	if inputEl == nil {
+		logrus.Errorf("[DEBUG performSearch] 找不到搜索输入框, 已尝试: %v", inputSelectors)
+		return errors.Wrap(err, "找不到搜索输入框")
+	}
+
+	// 获取输入框信息
+	inputClass, _ := inputEl.Attribute("class")
+	inputID, _ := inputEl.Attribute("id")
+	inputPlaceholder, _ := inputEl.Attribute("placeholder")
+	inputName, _ := inputEl.Attribute("name")
+	logrus.Debugf("[DEBUG performSearch] 输入框信息: class=%v, id=%v, name=%v, placeholder=%v",
+		inputClass, inputID, inputName, inputPlaceholder)
+
+	// ===== DEBUG: 步骤2 - 清空并输入关键词 =====
+	logrus.Debugf("[DEBUG performSearch] 步骤2: 清空输入框并输入关键词")
+	// 先清空输入框
+	err = inputEl.Input("")
+	if err != nil {
+		logrus.Errorf("[DEBUG performSearch] 清空输入框失败: %v", err)
+		return errors.Wrap(err, "清空输入框失败")
+	}
+
+	// 输入关键词
+	inputStart := time.Now()
 	err = inputEl.Input(params.Keyword)
 	if err != nil {
+		logrus.Errorf("[DEBUG performSearch] 输入关键词失败: %v", err)
 		return errors.Wrap(err, "输入关键词失败")
 	}
+	logrus.Debugf("[DEBUG performSearch] 关键词输入完成, 耗时: %v", time.Since(inputStart))
 
-	// 等待一下让输入生效
+	// 获取输入后的值
+	inputValueResult, _ := s.page.Eval("(el) => el.value", inputEl)
+	inputValue := ""
+	if inputValueResult != nil {
+		inputValue = inputValueResult.Value.Get("value").Str()
+	}
+	logrus.Debugf("[DEBUG performSearch] 输入框当前值: %s", inputValue)
+
+	// ===== DEBUG: 步骤3 - 等待输入生效 =====
+	logrus.Debugf("[DEBUG performSearch] 步骤3: 等待输入生效")
+	inputEffectStart := time.Now()
 	time.Sleep(500 * time.Millisecond)
+	logrus.Debugf("[DEBUG performSearch] 等待完成, 耗时: %v", time.Since(inputEffectStart))
 
-	// 按回车键提交搜索
+	// ===== DEBUG: 步骤4 - 按回车键提交搜索 =====
+	logrus.Debugf("[DEBUG performSearch] 步骤4: 按回车键提交搜索")
+	typeStart := time.Now()
 	err = s.page.Keyboard.Type(input.Enter)
 	if err != nil {
+		logrus.Errorf("[DEBUG performSearch] 提交搜索失败: %v", err)
 		return errors.Wrap(err, "提交搜索失败")
 	}
+	logrus.Debugf("[DEBUG performSearch] 回车键提交完成, 耗时: %v", time.Since(typeStart))
 
-	// 等待搜索结果加载
+	// ===== DEBUG: 步骤5 - 等待搜索结果加载 =====
+	logrus.Debugf("[DEBUG performSearch] 步骤5: 等待搜索结果加载")
+	waitLoadStart := time.Now()
 	err = s.page.WaitLoad()
 	if err != nil {
+		logrus.Errorf("[DEBUG performSearch] 等待搜索结果加载失败: %v", err)
 		return errors.Wrap(err, "等待搜索结果加载失败")
 	}
+	logrus.Debugf("[DEBUG performSearch] 搜索结果加载完成, 耗时: %v", time.Since(waitLoadStart))
 
-	// 等待搜索结果列表出现
+	// ===== DEBUG: 步骤6 - 等待搜索结果列表出现 =====
+	logrus.Debugf("[DEBUG performSearch] 步骤6: 等待搜索结果列表出现")
+	listWaitStart := time.Now()
 	time.Sleep(2 * time.Second)
+	logrus.Debugf("[DEBUG performSearch] 列表等待完成, 耗时: %v", time.Since(listWaitStart))
+
+	// 获取最终页面状态
+	pageURLFinal := getPageURL(s.page)
+	pageTitleFinal := getPageTitle(s.page)
+	logrus.Debugf("[DEBUG performSearch] 搜索完成后页面URL: %s", pageURLFinal)
+	logrus.Debugf("[DEBUG performSearch] 搜索完成后页面标题: %s", pageTitleFinal)
+
+	logrus.Debugf("[DEBUG performSearch] 搜索交互执行完成")
 
 	return nil
 }
@@ -311,6 +425,67 @@ func (s *Search) parseJobCard(card *rod.Element) (Job, error) {
 	}
 
 	return job, nil
+}
+
+// getPageURL 获取页面URL
+func getPageURL(page *rod.Page) string {
+	if page == nil {
+		return "page is nil"
+	}
+	result, err := page.Eval("() => window.location.href")
+	if err != nil {
+		logrus.Warnf("[DEBUG] getPageURL failed: %v", err)
+		return ""
+	}
+	if result == nil {
+		logrus.Warnf("[DEBUG] getPageURL result is nil")
+		return ""
+	}
+	return result.Value.Get("value").Str()
+}
+
+// getPageTitle 获取页面标题
+func getPageTitle(page *rod.Page) string {
+	if page == nil {
+		return "page is nil"
+	}
+	result, err := page.Eval("() => document.title")
+	if err != nil {
+		logrus.Warnf("[DEBUG] getPageTitle failed: %v", err)
+		return ""
+	}
+	if result == nil {
+		logrus.Warnf("[DEBUG] getPageTitle result is nil")
+		return ""
+	}
+	return result.Value.Get("value").Str()
+}
+
+// getPageState 获取页面当前状态信息
+func getPageState(page *rod.Page) string {
+	if page == nil {
+		return "page is nil"
+	}
+
+	// 获取页面URL
+	url := getPageURL(page)
+	// 获取页面标题
+	title := getPageTitle(page)
+	// 获取body是否存在
+	bodyExistsResult, _ := page.Eval("() => document.body !== null")
+	bodyExists := "unknown"
+	if bodyExistsResult != nil {
+		bodyExists = fmt.Sprintf("%v", bodyExistsResult.Value)
+	}
+	// 获取页面是否加载完成
+	readyStateResult, _ := page.Eval("() => document.readyState")
+	readyState := "unknown"
+	if readyStateResult != nil {
+		readyState = readyStateResult.Value.Str()
+	}
+
+	return fmt.Sprintf("url=%s, title=%s, bodyExists=%s, readyState=%s",
+		url, title, bodyExists, readyState)
 }
 
 // randomDelay 随机延时

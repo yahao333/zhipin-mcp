@@ -46,7 +46,7 @@ func (s *AppServer) handleCheckLoginStatus(ctx context.Context) *MCPToolResult {
 func (s *AppServer) handleGetLoginQrcode(ctx context.Context) *MCPToolResult {
 	logrus.Info("MCP: 获取登录二维码")
 
-	result, err := s.zhipinService.GetLoginQrcode(ctx)
+	result, err := s.zhipinService.GetLoginQrcodeWithBrowser(ctx)
 	if err != nil {
 		return &MCPToolResult{
 			Content: []MCPContent{{Type: "text", Text: "获取登录二维码失败: " + err.Error()}},

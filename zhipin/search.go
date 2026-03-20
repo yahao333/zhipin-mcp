@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -386,31 +387,11 @@ func (s *Search) parseJobCard(card *rod.Element) (Job, error) {
 	// 注意：.job-title 元素同时包含职位名称和薪资，需要拆分
 	titleEl, err := card.Element(".job-title")
 	if err == nil {
-		// 使用 innerText 获取渲染后的完整文本（包含职位名称和薪资）
-		titleResult, titleErr := titleEl.Eval("el => el.innerText")
-		if titleErr == nil && titleResult != nil {
-			fullTitle := titleResult.Value.Str()
+		// 获取原始文本（包含字体图标）
+		fullTitle, _ := titleEl.Text()
 
-			// 先获取薪资（使用 innerText 处理字体图标）
-			salaryEl, salaryErr := card.Element(".job-salary")
-			if salaryErr == nil {
-				salaryResult, _ := salaryEl.Eval("el => el.innerText")
-				if salaryResult != nil {
-					job.SalaryRange = salaryResult.Value.Str()
-				}
-			}
-
-			// 从 title 中移除薪资部分（薪资通常在最后，以换行符分隔）
-			if job.SalaryRange != "" {
-				// 移除薪资部分（包括换行符）
-				job.Title = strings.TrimSuffix(fullTitle, "\n"+job.SalaryRange)
-			} else {
-				job.Title = fullTitle
-			}
-		} else {
-			// 备用方案：使用普通 Text 方法
-			job.Title, _ = titleEl.Text()
-		}
+		// 从 title 中提取薪资并清理乱码
+		job.Title, job.SalaryRange = extractTitleAndSalary(fullTitle)
 	}
 
 	// 获取公司名称 - 尝试 .boss-name
@@ -562,6 +543,56 @@ func convertSalaryIcon(salary string) string {
 		}
 	}
 	return string(result)
+}
+
+// extractTitleAndSalary 从包含薪资的 title 中提取职位名称和薪资
+// title 格式示例: "go开发工程师\n-K" 或 "golang高级开发工程师\n-K·薪"
+func extractTitleAndSalary(fullTitle string) (title, salary string) {
+	if fullTitle == "" {
+		return "", ""
+	}
+
+	// 查找换行符位置，薪资通常在换行符后面
+	if idx := strings.Index(fullTitle, "\n"); idx >= 0 {
+		titlePart := fullTitle[:idx]
+		salaryPart := fullTitle[idx+1:]
+
+		// 将薪资中的字体图标转换为正常数字
+		salary = convertSalaryIcon(salaryPart)
+
+		return titlePart, salary
+	}
+
+	// 如果没有换行符，检查是否包含薪资模式（数字+K 或 数字+元/天等）
+	// 使用正则表达式匹配薪资模式
+	salaryPatterns := []string{
+		`[\d]+[kK]`,              // 12K, 25K
+		`[\d]+-[\d]+[kK]`,        // 12-25K
+		`[\d]+元/天`,               // 200元/天
+		`[\d]+-[\d]+元/天`,         // 200-300元/天
+		`[\d]+元/时`,               // 100元/时
+		`[\d]+-[\d]+元/时`,         // 100-200元/时
+		`[\d]+[kK]·[\d]+薪`,       // 12K·14薪
+		`[\d]+-[\d]+[kK]·[\d]+薪`, // 12-25K·14薪
+	}
+
+	for _, pattern := range salaryPatterns {
+		re := regexp.MustCompile(pattern)
+		loc := re.FindStringIndex(fullTitle)
+		if loc != nil {
+			// 找到薪资位置，薪资前面的部分是职位名称
+			salaryPart := fullTitle[loc[0]:loc[1]]
+			titlePart := strings.TrimSpace(fullTitle[:loc[0]])
+
+			// 将薪资中的字体图标转换为正常数字
+			salary = convertSalaryIcon(salaryPart)
+
+			return titlePart, salary
+		}
+	}
+
+	// 没有找到薪资，返回原始文本
+	return fullTitle, ""
 }
 
 // randomDelay 随机延时

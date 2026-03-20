@@ -9,7 +9,6 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 // Deliver 投递操作
@@ -40,8 +39,7 @@ func (d *Deliver) DeliverJob(ctx context.Context, jobID string) (*DeliverResult,
 		}, err
 	}
 	logrus.Debugf("[DeliverJob] 职位信息: %s | %s | %s", job.Title, job.CompanyName, job.SalaryRange)
-	time.Sleep(5 * time.Second)
-	debug.WritePageHTMLToFile(d.page, "deliver.html")
+
 	// 点击投递按钮
 	logrus.Debugf("[DeliverJob] 步骤2: 点击投递按钮")
 	err = d.clickDeliverButton()
@@ -98,12 +96,25 @@ func (d *Deliver) DeliverJobFromSearchList(jobID string) (*DeliverResult, error)
 	}
 	logrus.Debugf("[DeliverJobFromSearchList] 已找到职位卡片")
 
-	// 点击投递按钮
-	logrus.Debugf("[DeliverJobFromSearchList] 查找投递按钮 .btn-deliver")
-	deliverBtn, err := card.Element(".btn-deliver")
-	if err != nil {
+	// 点击投递按钮 - 尝试多个选择器
+	logrus.Debugf("[DeliverJobFromSearchList] 查找投递按钮")
+	selectors := []string{
+		".btn-startchat", // "立即沟通" 按钮 - 新版页面结构
+		".btn-deliver",   // 投递按钮 - 旧版
+	}
+
+	var deliverBtn *rod.Element
+	for _, selector := range selectors {
+		logrus.Debugf("[DeliverJobFromSearchList] 尝试选择器: %s", selector)
+		deliverBtn, err = card.Element(selector)
+		if err == nil {
+			logrus.Debugf("[DeliverJobFromSearchList] 找到按钮: %s", selector)
+			break
+		}
+	}
+
+	if deliverBtn == nil {
 		logrus.Debugf("[DeliverJobFromSearchList] 未找到投递按钮，切换到详情页投递: %v", err)
-		// 尝试点击整个卡片
 		return d.DeliverJobFromDetail(jobID)
 	}
 	logrus.Debugf("[DeliverJobFromSearchList] 已找到投递按钮")
@@ -188,19 +199,29 @@ func (d *Deliver) DeliverJobFromDetail(jobID string) (*DeliverResult, error) {
 func (d *Deliver) clickDeliverButton() error {
 	logrus.Debugf("[clickDeliverButton] 查找投递按钮")
 
-	// 查找投递按钮
-	btn, err := d.page.Element(".btn-deliver")
-	if err != nil {
-		logrus.Debugf("[clickDeliverButton] 未找到 .btn-deliver，尝试 button.btn-primary")
-		// 尝试其他选择器
-		btn, err = d.page.Element("button.btn-primary")
-		if err != nil {
-			logrus.Error("[clickDeliverButton] 找不到投递按钮")
-			return errors.New("找不到投递按钮")
+	// 尝试多个投递按钮选择器
+	selectors := []string{
+		".btn-startchat",     // "立即沟通" 按钮 - 新版页面结构
+		".btn-deliver",       // 投递按钮 - 旧版
+		"button.btn-primary", // 主要按钮
+	}
+
+	var btn *rod.Element
+	var err error
+
+	for _, selector := range selectors {
+		logrus.Debugf("[clickDeliverButton] 尝试选择器: %s", selector)
+		btn, err = d.page.Element(selector)
+		if err == nil {
+			logrus.Debugf("[clickDeliverButton] 找到按钮: %s", selector)
+			break
 		}
-		logrus.Debugf("[clickDeliverButton] 找到 button.btn-primary")
-	} else {
-		logrus.Debugf("[clickDeliverButton] 找到 .btn-deliver")
+		logrus.Debugf("[clickDeliverButton] 未找到: %s, 尝试下一个", selector)
+	}
+
+	if btn == nil {
+		logrus.Error("[clickDeliverButton] 找不到投递按钮")
+		return errors.New("找不到投递按钮")
 	}
 
 	logrus.Debugf("[clickDeliverButton] 执行点击")

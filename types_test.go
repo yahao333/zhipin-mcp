@@ -157,7 +157,6 @@ func TestCronTaskFields(t *testing.T) {
 func TestSearchJobsRequestFields(t *testing.T) {
 	req := SearchJobsRequest{
 		Keyword:    "工程师",
-		City:       "北京",
 		District:   "海淀区",
 		Experience: "3-5年",
 		Education:  "本科",
@@ -168,7 +167,6 @@ func TestSearchJobsRequestFields(t *testing.T) {
 	}
 
 	assert.Equal(t, "工程师", req.Keyword)
-	assert.Equal(t, "北京", req.City)
 	assert.Equal(t, "海淀区", req.District)
 	assert.Equal(t, "3-5年", req.Experience)
 	assert.Equal(t, "本科", req.Education)

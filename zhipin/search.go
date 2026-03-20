@@ -25,7 +25,7 @@ func (s *Search) SearchJobs(ctx context.Context, params SearchParams) (*SearchRe
 	// 构建搜索URL
 	url := s.buildSearchURL(params)
 
-	logrus.Infof("搜索职位: keyword=%s, city=%s, page=%d", params.Keyword, params.City, params.Page)
+	logrus.Infof("搜索职位: keyword=%s, page=%d", params.Keyword, params.Page)
 
 	// 访问搜索页面
 	err := s.page.Navigate(url)

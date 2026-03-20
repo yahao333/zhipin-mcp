@@ -130,7 +130,6 @@ func (s *AppServer) handleSearchJobs(ctx context.Context, args map[string]interf
 
 	req := &SearchJobsRequest{
 		Keyword:    keyword,
-		City:       city,
 		District:   district,
 		Experience: experience,
 		Education:  education,

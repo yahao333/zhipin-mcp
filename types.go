@@ -67,7 +67,6 @@ type CronTask struct {
 // SearchJobsRequest 搜索职位请求
 type SearchJobsRequest struct {
 	Keyword    string `json:"keyword" binding:"required"`
-	City       string `json:"city"`       // 城市，如 "北京"
 	District   string `json:"district"`   // 区域
 	Experience string `json:"experience"` // 经验要求
 	Education  string `json:"education"`  // 学历要求

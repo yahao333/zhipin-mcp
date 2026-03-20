@@ -32,7 +32,6 @@ type SearchResult struct {
 // SearchParams 搜索参数
 type SearchParams struct {
 	Keyword    string
-	City       string
 	District   string
 	Experience string
 	Education  string

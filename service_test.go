@@ -78,7 +78,6 @@ func TestSearchJobsRequestValidation(t *testing.T) {
 			name: "完整请求",
 			req: SearchJobsRequest{
 				Keyword:    "工程师",
-				City:       "北京",
 				District:   "海淀区",
 				Experience: "3-5年",
 				Education:  "本科",

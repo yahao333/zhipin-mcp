@@ -151,7 +151,6 @@ func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) 
 	searchAction := zhipin.NewSearch(page)
 	params := zhipin.SearchParams{
 		Keyword:    req.Keyword,
-		City:       req.City,
 		District:   req.District,
 		Experience: req.Experience,
 		Education:  req.Education,
@@ -435,7 +434,6 @@ func (s *ZhipinService) StartCron(ctx context.Context, task *CronTask) error {
 		// 创建搜索请求
 		req := &SearchJobsRequest{
 			Keyword:  keyword,
-			City:     city,
 			Page:     1,
 			PageSize: 10,
 		}

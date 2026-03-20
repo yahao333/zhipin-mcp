@@ -52,7 +52,7 @@ func (s *AppServer) handleAPISearchJobs(c *gin.Context) {
 		return
 	}
 
-	logrus.Infof("API: 搜索职位 - keyword=%s, city=%s", req.Keyword, req.City)
+	logrus.Infof("API: 搜索职位 - keyword=%s", req.Keyword)
 
 	result, err := s.zhipinService.SearchJobs(c.Request.Context(), &req)
 	if err != nil {

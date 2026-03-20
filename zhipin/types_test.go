@@ -80,7 +80,6 @@ func TestSearchResultFields(t *testing.T) {
 func TestSearchParamsFields(t *testing.T) {
 	params := SearchParams{
 		Keyword:    "工程师",
-		City:       "北京",
 		District:   "海淀区",
 		Experience: "3-5年",
 		Education:  "本科",
@@ -91,7 +90,6 @@ func TestSearchParamsFields(t *testing.T) {
 	}
 
 	assert.Equal(t, "工程师", params.Keyword)
-	assert.Equal(t, "北京", params.City)
 	assert.Equal(t, "海淀区", params.District)
 	assert.Equal(t, "3-5年", params.Experience)
 	assert.Equal(t, "本科", params.Education)

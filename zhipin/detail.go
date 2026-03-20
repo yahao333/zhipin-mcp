@@ -108,9 +108,9 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 		}
 	} else {
 		logrus.Warnf("[Detail.parseJobDetail] 从侧边栏未找到公司名称: %v", err)
-		// 备选: 尝试代招职位格式 .brand-name
+		// 备选: 尝试代招职位格式 .brand-name (使用 3 秒超时)
 		if companyName == "" {
-			brandEl, err := d.page.Element(".brand-name")
+			brandEl, err := pageWithTimeout.Element(".brand-name")
 			if err == nil {
 				companyName, _ = brandEl.Text()
 				logrus.Debugf("[Detail.parseJobDetail] 找到代招职位公司名称原始文本: %s", companyName)

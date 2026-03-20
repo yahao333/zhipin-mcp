@@ -188,7 +188,7 @@ api-search:
 	@echo "==> 搜索职位"
 	curl -s -X POST $(API_BASE)/api/jobs/search \
 		-H "Content-Type: application/json" \
-		-d '{"keyword": "Go开发", "city": "北京"}'
+		-d '{"keyword": "Go开发"}'
 
 # 职位详情
 .PHONY: api-job-detail

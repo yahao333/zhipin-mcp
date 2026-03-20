@@ -266,21 +266,35 @@ func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) 
 
 // GetJobDetail 获取职位详情
 func (s *ZhipinService) GetJobDetail(ctx context.Context, jobID string) (*JobDetailResponse, error) {
+	logrus.Debugf("[ZhipinService.GetJobDetail] ========== 开始获取职位详情 ==========")
+	logrus.Debugf("[ZhipinService.GetJobDetail] 接收到的 jobID: %s", jobID)
+
 	b := newBrowser()
 	defer b.Close()
+	logrus.Debugf("[ZhipinService.GetJobDetail] 浏览器实例创建完成")
 
 	page := b.NewPage()
 	defer page.Close()
+	logrus.Debugf("[ZhipinService.GetJobDetail] 页面实例创建完成")
 
 	detailAction := zhipin.NewDetail(page)
+	logrus.Debugf("[ZhipinService.GetJobDetail] Detail action 实例创建完成，准备调用 GetJobDetail")
+
 	job, err := detailAction.GetJobDetail(ctx, jobID)
 	if err != nil {
+		logrus.Errorf("[ZhipinService.GetJobDetail] detailAction.GetJobDetail 失败: %v", err)
 		return nil, err
 	}
 
-	return &JobDetailResponse{
+	logrus.Debugf("[ZhipinService.GetJobDetail] 获取到职位信息: %+v", job)
+
+	result := &JobDetailResponse{
 		Job: convertJob(job),
-	}, nil
+	}
+	logrus.Debugf("[ZhipinService.GetJobDetail] 转换后的响应: %+v", result)
+	logrus.Debugf("[ZhipinService.GetJobDetail] ========== 获取职位详情完成 ==========")
+
+	return result, nil
 }
 
 // DeliverJob 投递简历

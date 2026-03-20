@@ -77,17 +77,30 @@ func (s *AppServer) handleAPISearchJobs(c *gin.Context) {
 
 // handleAPIGetJobDetail 获取职位详情
 func (s *AppServer) handleAPIGetJobDetail(c *gin.Context) {
+	logrus.Debugf("[handleAPIGetJobDetail] ========== 开始获取职位详情 ==========")
+	logrus.Debugf("[handleAPIGetJobDetail] 请求路径: %s", c.Request.URL.Path)
+	logrus.Debugf("[handleAPIGetJobDetail] 请求方法: %s", c.Request.Method)
+
 	jobID := c.Param("job_id")
+	logrus.Debugf("[handleAPIGetJobDetail] 提取的 job_id: %s", jobID)
+
 	if jobID == "" {
+		logrus.Warnf("[handleAPIGetJobDetail] job_id 为空，拒绝请求")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id is required"})
 		return
 	}
 
+	logrus.Debugf("[handleAPIGetJobDetail] 准备调用 zhipinService.GetJobDetail, jobID=%s", jobID)
 	detail, err := s.zhipinService.GetJobDetail(c.Request.Context(), jobID)
 	if err != nil {
+		logrus.Errorf("[handleAPIGetJobDetail] GetJobDetail 失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	logrus.Debugf("[handleAPIGetJobDetail] GetJobDetail 成功, detail=%+v", detail)
+	logrus.Debugf("[handleAPIGetJobDetail] ========== 获取职位详情完成 ==========")
+
 	c.JSON(http.StatusOK, detail)
 }
 

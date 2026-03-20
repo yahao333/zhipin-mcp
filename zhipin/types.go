@@ -18,6 +18,7 @@ type Job struct {
 	HRActive    string    `json:"hr_active"`
 	Description string    `json:"description"`
 	Tags        []string  `json:"tags"`
+	URL         string    `json:"url"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 

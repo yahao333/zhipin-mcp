@@ -137,27 +137,29 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 	// 等待页面稳定
 	time.Sleep(1 * time.Second)
 
-	// 检查是否已登录（通过检查用户头像或用户名元素）
-	// 登录成功后有 <div class="user-nav"> 下的 <li class="nav-figure">
-	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
-	if err != nil {
-		return false, errors.Wrap(err, "check login status failed")
-	}
-
-	logrus.Debugf("user is logged in: %v", exists)
-	if exists {
-		return true, nil
-	}
-
-	logrus.Debugf("user is not logged in")
-
 	// 检查是否有登录按钮（未登录）
-	exists, _, err = pp.Has(".btns .header-login-btn")
+	exists, _, err := pp.Has(".btns .header-login-btn")
 	if err != nil {
 		return false, errors.Wrap(err, "check login status failed")
 	}
 
 	logrus.Debugf("login button exists: %v", exists)
+	if exists {
+		return false, nil
+	}
+
+	// 检查是否已登录（通过检查用户头像或用户名元素）
+	// 登录成功后有 <div class="user-nav"> 下的 <li class="nav-figure">
+	exists, _, err = pp.Has(".user-name, .nick-name, .boss-avatar, .nav-figure, .user-nav")
+	if err != nil {
+		return false, errors.Wrap(err, "check login status failed")
+	}
+
+	if exists {
+		return true, nil
+	}
+
+	logrus.Debugf("user is not logged in")
 
 	// 有登录按钮说明未登录
 	return !exists, nil

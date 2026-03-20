@@ -107,8 +107,9 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 	job.CompanyName = companyName
 
 	// 获取HR信息
-	logrus.Debugf("[Detail.parseJobDetail] 查找HR信息 .hr-name")
-	hrNameEl, err := d.page.Element(".hr-name")
+	// HR名称在 .job-boss-info .name 元素中
+	logrus.Debugf("[Detail.parseJobDetail] 查找HR信息 .job-boss-info .name")
+	hrNameEl, err := d.page.Element(".job-boss-info .name")
 	if err == nil {
 		job.HRName, _ = hrNameEl.Text()
 		logrus.Debugf("[Detail.parseJobDetail] HR名称: %s", job.HRName)

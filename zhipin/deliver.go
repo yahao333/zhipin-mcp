@@ -9,6 +9,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 // Deliver 投递操作
@@ -39,7 +40,8 @@ func (d *Deliver) DeliverJob(ctx context.Context, jobID string) (*DeliverResult,
 		}, err
 	}
 	logrus.Debugf("[DeliverJob] 职位信息: %s | %s | %s", job.Title, job.CompanyName, job.SalaryRange)
-
+	time.Sleep(5 * time.Second)
+	debug.WritePageHTMLToFile(d.page, "deliver.html")
 	// 点击投递按钮
 	logrus.Debugf("[DeliverJob] 步骤2: 点击投递按钮")
 	err = d.clickDeliverButton()

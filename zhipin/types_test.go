@@ -199,3 +199,90 @@ func TestJobJSONSerialization(t *testing.T) {
 	assert.Equal(t, job.CompanyName, parsedJob.CompanyName)
 	assert.Equal(t, job.Tags, parsedJob.Tags)
 }
+
+// TestSearchResultEmptyJobs 测试空职位列表
+func TestSearchResultEmptyJobs(t *testing.T) {
+	result := SearchResult{
+		Jobs:     []Job{},
+		Total:    0,
+		Page:     1,
+		PageSize: 20,
+	}
+
+	assert.Empty(t, result.Jobs)
+	assert.Equal(t, 0, result.Total)
+	assert.Equal(t, 1, result.Page)
+	assert.Equal(t, 20, result.PageSize)
+}
+
+// TestSearchParamsDefaults 测试搜索参数默认值
+func TestSearchParamsDefaults(t *testing.T) {
+	// 测试零值
+	params := SearchParams{}
+
+	assert.Equal(t, "", params.Keyword)
+	assert.Equal(t, "", params.District)
+	assert.Equal(t, 0, params.Page)
+	assert.Equal(t, 0, params.PageSize)
+}
+
+// TestSearchParamsFull 测试完整搜索参数
+func TestSearchParamsFull(t *testing.T) {
+	params := SearchParams{
+		Keyword:    "Go工程师",
+		District:   "浦东新区",
+		Experience: "3-5年",
+		Education:  "本科",
+		JobType:    "全职",
+		Salary:     "30k-50k",
+		Page:       2,
+		PageSize:   30,
+	}
+
+	assert.Equal(t, "Go工程师", params.Keyword)
+	assert.Equal(t, "浦东新区", params.District)
+	assert.Equal(t, "3-5年", params.Experience)
+	assert.Equal(t, "本科", params.Education)
+	assert.Equal(t, "全职", params.JobType)
+	assert.Equal(t, "30k-50k", params.Salary)
+	assert.Equal(t, 2, params.Page)
+	assert.Equal(t, 30, params.PageSize)
+}
+
+// TestJobWithAllFields 测试包含所有字段的Job
+func TestJobWithAllFields(t *testing.T) {
+	now := time.Now()
+	job := Job{
+		ID:          "job-full-001",
+		Title:       "资深Go工程师",
+		CompanyName: "B站",
+		SalaryRange: "40k-60k",
+		City:        "上海",
+		District:    "杨浦区",
+		Experience:  "5-10年",
+		Education:   "本科",
+		JobType:     "全职",
+		CompanySize: "500-1000人",
+		HRName:      "李HR",
+		HRActive:    "今日活跃",
+		Description: "负责B站后端架构设计",
+		Tags:        []string{"六险一金", "免费三餐", "房补"},
+		UpdatedAt:   now,
+	}
+
+	assert.Equal(t, "job-full-001", job.ID)
+	assert.Equal(t, "资深Go工程师", job.Title)
+	assert.Equal(t, "B站", job.CompanyName)
+	assert.Equal(t, "40k-60k", job.SalaryRange)
+	assert.Equal(t, "上海", job.City)
+	assert.Equal(t, "杨浦区", job.District)
+	assert.Equal(t, "5-10年", job.Experience)
+	assert.Equal(t, "本科", job.Education)
+	assert.Equal(t, "全职", job.JobType)
+	assert.Equal(t, "500-1000人", job.CompanySize)
+	assert.Equal(t, "李HR", job.HRName)
+	assert.Equal(t, "今日活跃", job.HRActive)
+	assert.Equal(t, "负责B站后端架构设计", job.Description)
+	assert.Len(t, job.Tags, 3)
+	assert.Equal(t, now, job.UpdatedAt)
+}

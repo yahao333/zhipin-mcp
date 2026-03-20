@@ -1,0 +1,39 @@
+# Boss直聘 MCP 服务配置文件
+
+# 服务配置
+server:
+  port: ":18061"
+
+# 浏览器配置
+browser:
+  headless: true  # 是否无头模式
+  bin: ""         # 浏览器二进制路径，为空则自动查找
+  user_data_dir: ""  # 用户数据目录，用于保持登录状态
+
+# 投递配置
+delivery:
+  max_daily: 30           # 每日投递上限
+  min_delay: 3000        # 最小延时(毫秒)
+  max_delay: 8000        # 最大延时(毫秒)
+  check_duplicate: true  # 投递前检查是否已投
+
+# 账号配置（密码使用AES加密存储）
+account:
+  username: ""           # BOSS直聘账号（手机号/邮箱）
+  password: ""           # AES加密后的密码
+
+# 定时任务配置
+cron:
+  enabled: false
+  keyword: "Go后端开发"
+  city: "深圳"
+  expression: "0 9 * * *"  # 每天早上9点执行
+
+# 日志配置
+log:
+  level: "debug"
+  format: "text"  # text/json
+
+# 数据库配置
+database:
+  path: "./data/zhipin.db"  # SQLite数据库路径

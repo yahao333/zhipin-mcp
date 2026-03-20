@@ -353,14 +353,18 @@ api-job-detail:
 	fi
 	curl -s $(API_BASE)/api/jobs/$(ID)
 
-# 投递简历
+# 投递简历 (用法: make api-deliver ID=实际job_id)
 .PHONY: api-deliver
 api-deliver:
 	@echo "==> 投递简历"
-	@echo "注意: job_id 需要替换为真实 ID"
+	@if [ -z "$(ID)" ]; then \
+		echo "用法: make api-deliver ID=job_id"; \
+		echo "示例: make api-deliver ID=job123456"; \
+		exit 1; \
+	fi
 	curl -s -X POST $(API_BASE)/api/deliver \
 		-H "Content-Type: application/json" \
-		-d '{"job_id": "job123"}'
+		-d '{"job_id": "$(ID)"}'
 
 # 批量投递
 .PHONY: api-batch-deliver

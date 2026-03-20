@@ -16,7 +16,7 @@ func main() {
 		port     string
 		mode     string // 运行模式: http 或 stdio
 	)
-	flag.StringVar(&mode, "mode", "http", "运行模式: http 或 stdio")
+	flag.StringVar(&mode, "mode", "stdio", "运行模式: http 或 stdio")
 	flag.BoolVar(&headless, "headless", true, "是否无头模式")
 	flag.StringVar(&binPath, "bin", "", "浏览器二进制文件路径")
 	flag.StringVar(&port, "port", ":18061", "端口")

@@ -102,13 +102,13 @@ func (s *Search) performSearch(params SearchParams) error {
 
 	inputSelectors := []string{
 		".search-input-box .input",       // 搜索框容器内的input
-		".c-search-input .input",        // 搜索输入容器
+		".c-search-input .input",         // 搜索输入容器
 		"input.input[placeholder*='职位']", // 带placeholder的input
-		".search-input",                 // 旧选择器
-		".ka-input",                     // 旧选择器
-		"input[name='query']",           // 旧选择器
-		"#keyword",                      // 旧选择器
-		"input[placeholder*='职位']",    // 旧选择器
+		".search-input",                  // 旧选择器
+		".ka-input",                      // 旧选择器
+		"input[name='query']",            // 旧选择器
+		"#keyword",                       // 旧选择器
+		"input[placeholder*='职位']",       // 旧选择器
 	}
 	var inputEl *rod.Element
 	var err error

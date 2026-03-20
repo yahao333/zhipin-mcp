@@ -34,6 +34,19 @@ func (s *AppServer) handleAPIGetLoginQrcode(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// handleAPIGetLoginQrcodeWithBrowser 扫码登录（显示浏览器窗口）
+// 在 headless 模式下调用此接口会临时切换到非 headless 模式显示二维码
+func (s *AppServer) handleAPIGetLoginQrcodeWithBrowser(c *gin.Context) {
+	logrus.Info("API: 扫码登录（显示浏览器窗口）")
+
+	result, err := s.zhipinService.GetLoginQrcodeWithBrowser(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 // handleAPIDeleteCookies 删除cookies
 func (s *AppServer) handleAPIDeleteCookies(c *gin.Context) {
 	err := s.zhipinService.DeleteCookies(c.Request.Context())

@@ -249,7 +249,7 @@ func TestSearchParamsFull(t *testing.T) {
 	assert.Equal(t, 30, params.PageSize)
 }
 
-// TestJobWithAllFields 测试包含所有字段的Job
+// TestJobWithAllFields 测试包含所有字段的Job（包含新增的URL字段）
 func TestJobWithAllFields(t *testing.T) {
 	now := time.Now()
 	job := Job{
@@ -267,6 +267,7 @@ func TestJobWithAllFields(t *testing.T) {
 		HRActive:    "今日活跃",
 		Description: "负责B站后端架构设计",
 		Tags:        []string{"六险一金", "免费三餐", "房补"},
+		URL:         "https://www.zhipin.com/job_detail/abc123.html",
 		UpdatedAt:   now,
 	}
 
@@ -284,5 +285,65 @@ func TestJobWithAllFields(t *testing.T) {
 	assert.Equal(t, "今日活跃", job.HRActive)
 	assert.Equal(t, "负责B站后端架构设计", job.Description)
 	assert.Len(t, job.Tags, 3)
+	assert.Equal(t, "https://www.zhipin.com/job_detail/abc123.html", job.URL)
 	assert.Equal(t, now, job.UpdatedAt)
+}
+
+// TestJobURLField 测试Job的URL字段
+func TestJobURLField(t *testing.T) {
+	tests := []struct {
+		name     string
+		job      Job
+		expected string
+	}{
+		{
+			name: "带URL的Job",
+			job: Job{
+				ID:    "job-url-001",
+				Title: "测试工程师",
+				URL:   "https://www.zhipin.com/job_detail/123.html",
+			},
+			expected: "https://www.zhipin.com/job_detail/123.html",
+		},
+		{
+			name: "空URL的Job",
+			job: Job{
+				ID:    "job-url-002",
+				Title: "测试工程师",
+				URL:   "",
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.job.URL)
+		})
+	}
+}
+
+// TestJobJSONSerializationWithURL 测试包含URL字段的JSON序列化
+func TestJobJSONSerializationWithURL(t *testing.T) {
+	job := Job{
+		ID:          "job-001",
+		Title:       "高级工程师",
+		CompanyName: "字节跳动",
+		SalaryRange: "30k-50k",
+		Tags:        []string{"五险一金", "弹性工作"},
+		URL:         "https://www.zhipin.com/job_detail/xyz.html",
+	}
+
+	// 转换为 JSON
+	jsonStr, err := json.Marshal(job)
+	assert.NoError(t, err)
+	assert.Contains(t, string(jsonStr), "job-001")
+	assert.Contains(t, string(jsonStr), "https://www.zhipin.com/job_detail/xyz.html")
+
+	// 从 JSON 解析
+	var parsedJob Job
+	err = json.Unmarshal(jsonStr, &parsedJob)
+	assert.NoError(t, err)
+	assert.Equal(t, job.ID, parsedJob.ID)
+	assert.Equal(t, job.URL, parsedJob.URL)
 }

@@ -138,7 +138,8 @@ type LoginStatusResponse struct {
 type LoginQrcodeResponse struct {
 	Timeout    string `json:"timeout"`
 	IsLoggedIn bool   `json:"is_logged_in"`
-	Img        string `json:"img,omitempty"` // base64 编码的图片 (data:image/png;base64,...)
+	Img        string `json:"img,omitempty"`     // base64 编码的图片 (data:image/png;base64,...)
+	Message    string `json:"message,omitempty"` // 附加消息（如登录成功、超时等）
 }
 
 // ConfigResponse 配置响应

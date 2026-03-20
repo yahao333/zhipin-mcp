@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/xpzouying/headless_browser"
 	"github.com/yahao333/zhipin-mcp/browser"
@@ -126,6 +127,96 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 		}(),
 		Img:        img,
 		IsLoggedIn: loggedIn,
+	}, nil
+}
+
+// GetLoginQrcodeWithBrowser 获取登录二维码（非 headless 模式，显示浏览器窗口）
+// 用于 headless 模式下扫码登录，会临时切换到非 headless 模式
+func (s *ZhipinService) GetLoginQrcodeWithBrowser(ctx context.Context) (*LoginQrcodeResponse, error) {
+	// 保存原始 headless 设置
+	originalHeadless := configs.IsHeadless()
+
+	// 临时设置为非 headless 模式
+	logrus.Info("临时切换到非 headless 模式以显示二维码")
+	configs.SetHeadless(false)
+
+	// 确保最后恢复原始设置
+	defer func() {
+		configs.ResetHeadlessOverride()
+		logrus.Infof("恢复 headless 模式: %v", originalHeadless)
+	}()
+
+	// 创建非 headless 浏览器
+	b := browser.NewBrowser(false, browser.WithBinPath(configs.GetBinPath()))
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
+
+	loginAction := zhipin.NewLogin(page)
+
+	// 先检查登录状态
+	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果已登录，直接返回
+	if isLoggedIn {
+		return &LoginQrcodeResponse{
+			Timeout:    "0s",
+			Img:        "",
+			IsLoggedIn: true,
+			Message:    "已登录",
+		}, nil
+	}
+
+	// 访问登录页并获取二维码（不返回 base64，让用户直接在浏览器中扫码）
+	_, loggedIn, err := loginAction.FetchQrcodeImage(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "获取二维码失败")
+	}
+	// 如果在获取二维码过程中已经登录了
+	if loggedIn {
+		return &LoginQrcodeResponse{
+			Timeout:    "0s",
+			Img:        "",
+			IsLoggedIn: true,
+			Message:    "已登录",
+		}, nil
+	}
+
+	// 保持页面打开，等待用户扫码登录
+	// 这里会阻塞直到登录成功或超时
+	logrus.Info("请在弹出的浏览器窗口中扫码登录...")
+
+	timeout := 4 * time.Minute
+	ctxTimeout, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// 等待登录成功
+	success := loginAction.WaitForLogin(ctxTimeout)
+	if !success {
+		return &LoginQrcodeResponse{
+			Timeout:    timeout.String(),
+			Img:        "",
+			IsLoggedIn: false,
+			Message:    "扫码登录超时，请重试",
+		}, nil
+	}
+
+	// 登录成功，保存 cookies
+	if err := saveCookies(page); err != nil {
+		logrus.Warnf("保存 cookies 失败: %v", err)
+	} else {
+		logrus.Info("cookies 已保存")
+	}
+
+	return &LoginQrcodeResponse{
+		Timeout:    "0s",
+		Img:        "",
+		IsLoggedIn: true,
+		Message:    "登录成功",
 	}, nil
 }
 
@@ -487,7 +578,7 @@ func (s *ZhipinService) StopCron(ctx context.Context, taskID int) error {
 // 辅助函数
 
 func newBrowser() *headless_browser.Browser {
-	return browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
+	return browser.NewBrowser(configs.GetEffectiveHeadless(), browser.WithBinPath(configs.GetBinPath()))
 }
 
 // saveCookies 保存浏览器 cookies 到文件

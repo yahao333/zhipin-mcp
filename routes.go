@@ -27,6 +27,7 @@ func setupRoutes(app *AppServer) *gin.Engine {
 		// 登录相关
 		api.GET("/login/status", app.handleAPICheckLoginStatus)
 		api.GET("/login/qrcode", app.handleAPIGetLoginQrcode)
+		api.GET("/login/qrcode/browser", app.handleAPIGetLoginQrcodeWithBrowser) // 扫码登录（显示浏览器窗口）
 		api.DELETE("/login/cookies", app.handleAPIDeleteCookies)
 
 		// 职位相关

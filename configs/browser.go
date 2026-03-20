@@ -6,10 +6,11 @@ import (
 )
 
 var (
-	headless    = true
-	binPath     = ""
-	userDataDir = ""
-	mu          sync.RWMutex
+	headless         = true
+	headlessOverride = false // 临时覆盖值，-1 表示无覆盖
+	binPath          = ""
+	userDataDir      = ""
+	mu               sync.RWMutex
 )
 
 // InitHeadless 初始化无头模式设置
@@ -58,4 +59,28 @@ func GetUserDataDir() string {
 	mu.RLock()
 	defer mu.RUnlock()
 	return userDataDir
+}
+
+// SetHeadless 临时设置 headless 模式（用于扫码登录时临时切换）
+func SetHeadless(h bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	headlessOverride = h
+}
+
+// ResetHeadlessOverride 重置 headless 覆盖，恢复默认配置
+func ResetHeadlessOverride() {
+	mu.Lock()
+	defer mu.Unlock()
+	headlessOverride = false
+}
+
+// GetEffectiveHeadless 获取实际生效的 headless 值（考虑覆盖）
+func GetEffectiveHeadless() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if headlessOverride != false {
+		return headlessOverride
+	}
+	return headless
 }

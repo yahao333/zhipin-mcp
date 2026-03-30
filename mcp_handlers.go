@@ -522,21 +522,45 @@ func (s *AppServer) handleListMessages(ctx context.Context) *MCPToolResult {
 func (s *AppServer) handleDeleteMessage(ctx context.Context, args map[string]interface{}) *MCPToolResult {
 	logrus.Info("MCP: 删除消息")
 
-	personName, _ := args["person_name"].(string)
-	companyName, _ := args["company_name"].(string)
-	jobTitle, _ := args["job_title"].(string)
-
-	if personName == "" {
+	// 解析 messages 数组
+	messagesRaw, ok := args["messages"].([]interface{})
+	if !ok || len(messagesRaw) == 0 {
 		return &MCPToolResult{
-			Content: []MCPContent{{Type: "text", Text: "请提供人名称（person_name）用于匹配要删除的消息"}},
+			Content: []MCPContent{{Type: "text", Text: "请提供消息列表（messages），每个消息包含 person_name、company_name、job_title"}},
 			IsError: true,
 		}
 	}
 
+	messages := make([]MessageFilter, 0, len(messagesRaw))
+	for i, m := range messagesRaw {
+		msgMap, ok := m.(map[string]interface{})
+		if !ok {
+			return &MCPToolResult{
+				Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("第 %d 条消息格式错误", i+1)}},
+				IsError: true,
+			}
+		}
+
+		personName, _ := msgMap["person_name"].(string)
+		if personName == "" {
+			return &MCPToolResult{
+				Content: []MCPContent{{Type: "text", Text: fmt.Sprintf("第 %d 条消息的 person_name 不能为空", i+1)}},
+				IsError: true,
+			}
+		}
+
+		companyName, _ := msgMap["company_name"].(string)
+		jobTitle, _ := msgMap["job_title"].(string)
+
+		messages = append(messages, MessageFilter{
+			PersonName:  personName,
+			CompanyName: companyName,
+			JobTitle:    jobTitle,
+		})
+	}
+
 	req := &DeleteMessageRequest{
-		PersonName:  personName,
-		CompanyName: companyName,
-		JobTitle:    jobTitle,
+		Messages: messages,
 	}
 
 	result, err := s.zhipinService.DeleteMessage(ctx, req)
@@ -547,11 +571,13 @@ func (s *AppServer) handleDeleteMessage(ctx context.Context, args map[string]int
 		}
 	}
 
-	var text string
-	if result.Success {
-		text = fmt.Sprintf("✅ 消息删除成功！\n\n筛选条件:\n- 人名称: %s\n- 公司: %s\n- 职位: %s", personName, companyName, jobTitle)
-	} else {
-		text = fmt.Sprintf("❌ 删除消息失败\n\n原因: %s", result.Message)
+	text := fmt.Sprintf("删除消息完成！\n\n")
+	text += fmt.Sprintf("总数: %d\n", result.Total)
+	text += fmt.Sprintf("成功: %d\n", result.Deleted)
+	text += fmt.Sprintf("失败: %d\n\n", result.Failed)
+	text += "详情:\n"
+	for i, msg := range result.Messages {
+		text += fmt.Sprintf("%d. %s\n", i+1, msg)
 	}
 
 	return &MCPToolResult{

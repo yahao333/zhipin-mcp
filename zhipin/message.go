@@ -567,129 +567,121 @@ func (m *MessageAction) DeleteMessage(ctx context.Context, personName, companyNa
 func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
 	logrus.Debugf("[MessageAction.clickDeleteButton] 开始查找删除按钮")
 
-	// 尝试多种选择器定位删除按钮
-	deleteSelectors := []string{
-		".user-operation",           // 用户操作容器
-		"[class*='user-operation']", // 包含 user-operation 的元素
-		"[class*='operate']",        // 包含 operate 的元素
-		".icon-operate",             // 操作图标
-		"[class*='icon-operate']",   // 包含 icon-operate 的元素
+	// 步骤1: 找到 user-operation 元素
+	var userOpEl *rod.Element
+	userOpSelectors := []string{
+		".user-operation",
+		"[class*='user-operation']",
 	}
 
-	var deleteBtn *rod.Element
-
-	for _, selector := range deleteSelectors {
-		logrus.Debugf("[MessageAction.clickDeleteButton] 尝试选择器: %s", selector)
+	for _, selector := range userOpSelectors {
+		logrus.Debugf("[MessageAction.clickDeleteButton] 查找 user-operation: %s", selector)
 		els, err := item.Elements(selector)
 		if err == nil && len(els) > 0 {
-			logrus.Debugf("[MessageAction.clickDeleteButton] 选择器 %s 找到 %d 个元素", selector, len(els))
-			// 找到操作按钮容器
-			deleteBtn = els[0]
+			userOpEl = els[0]
+			logrus.Debugf("[MessageAction.clickDeleteButton] 找到 user-operation 元素")
 			break
 		}
 	}
 
-	if deleteBtn == nil {
-		logrus.Warnf("[MessageAction.clickDeleteButton] 未找到操作按钮，尝试在父元素中查找")
-		// 尝试在整个消息列表区域查找
-		operateSelectors := []string{
-			".friend-item:hover .user-operation",
-			"[role='listitem']:hover .user-operation",
-			".chat-item:hover [class*='operate']",
-		}
-		for _, sel := range operateSelectors {
-			els, err := m.page.Elements(sel)
-			if err == nil && len(els) > 0 {
-				deleteBtn = els[0]
-				break
-			}
-		}
+	if userOpEl == nil {
+		logrus.Errorf("[MessageAction.clickDeleteButton] 未找到 user-operation 元素")
+		return errors.New("未找到 user-operation 元素")
 	}
 
-	if deleteBtn == nil {
-		// 最后尝试通过文本定位删除按钮
-		logrus.Debugf("[MessageAction.clickDeleteButton] 尝试通过文本查找删除按钮")
-		return m.clickDeleteByText()
+	// 获取 user-operation 的 HTML 用于调试
+	if html, err := userOpEl.HTML(); err == nil {
+		logrus.Debugf("[MessageAction.clickDeleteButton] user-operation HTML: %s", html)
 	}
 
-	// 获取按钮的 HTML 用于调试
-	if html, err := deleteBtn.HTML(); err == nil {
-		logrus.Debugf("[MessageAction.clickDeleteButton] 操作按钮HTML长度: %d", len(html))
-		if len(html) > 300 {
-			html = html[:300] + "..."
-		}
-		logrus.Debugf("[MessageAction.clickDeleteButton] 操作按钮HTML: %s", html)
+	// 步骤2: 鼠标移动到 user-operation 上（使用 Mouse 方法精确控制）
+	logrus.Debugf("[MessageAction.clickDeleteButton] 鼠标移动到 user-operation")
+	if err := userOpEl.Hover(); err != nil {
+		logrus.Errorf("[MessageAction.clickDeleteButton] Hover user-operation 失败: %v", err)
+		return err
 	}
 
-	// 鼠标悬停到操作按钮以显示删除选项
-	logrus.Debugf("[MessageAction.clickDeleteButton] 鼠标悬停到操作按钮")
-	if err := deleteBtn.Hover(); err != nil {
-		logrus.Warnf("[MessageAction.clickDeleteButton] Hover 操作按钮失败: %v", err)
+	// 等待下拉菜单出现（按钮：置顶、删除）
+	time.Sleep(800 * time.Millisecond)
+
+	// 步骤3: 查找出现的按钮（置顶和删除）
+	// 根据用户描述，悬停后会出现"置顶"和"删除"两个按钮
+	logrus.Debugf("[MessageAction.clickDeleteButton] 查找下拉菜单按钮")
+
+	// 尝试多种选择器找到下拉菜单中的按钮
+	menuBtnSelectors := []string{
+		".user-operation button",
+		".user-operation a",
+		".user-operation [class*='btn']",
+		".user-operation [role='button']",
+		"[class*='dropdown'] button",
+		"[class*='dropdown'] a",
+		"[class*='menu'] button",
+		"[class*='menu'] a",
+		"[class*='popup'] button",
+		"[class*='popup'] a",
 	}
 
-	time.Sleep(500 * time.Millisecond)
-
-	// 查找删除按钮（可能是带有特定class或者文本的按钮）
-	deleteBtnSelectors := []string{
-		"img[src*='delete']",
-		"[class*='delete']",
-		"button[class*='delete']",
-		".icon-operate-hover",        // 删除图标悬停状态
-		"img[src*='operater-hover']", // 操作图标悬停状态
-	}
-
-	for _, sel := range deleteBtnSelectors {
-		btns, err := deleteBtn.Elements(sel)
+	for _, selector := range menuBtnSelectors {
+		btns, err := item.Elements(selector)
 		if err == nil && len(btns) > 0 {
-			logrus.Debugf("[MessageAction.clickDeleteButton] 找到删除按钮候选: %s", sel)
-			// 第一个是置顶，第二个是删除
-			if len(btns) >= 2 {
-				logrus.Infof("[MessageAction.clickDeleteButton] 点击第2个按钮（删除）")
-				return btns[1].Click(proto.InputMouseButtonLeft, 1)
+			logrus.Debugf("[MessageAction.clickDeleteButton] 选择器 %s 找到 %d 个按钮", selector, len(btns))
+			for i, btn := range btns {
+				text, _ := btn.Text()
+				logrus.Debugf("[MessageAction.clickDeleteButton] 按钮 %d 文本: %s", i, text)
 			}
-			// 如果只有一个，可能是删除按钮
-			return btns[0].Click(proto.InputMouseButtonLeft, 1)
+			// 找"删除"按钮（通常在第二个位置：置顶、删除）
+			for _, btn := range btns {
+				text, _ := btn.Text()
+				if strings.Contains(text, "删除") {
+					logrus.Infof("[MessageAction.clickDeleteButton] 点击删除按钮")
+					return btn.Click(proto.InputMouseButtonLeft, 1)
+				}
+			}
 		}
 	}
 
-	// 尝试直接点击操作按钮区域
-	logrus.Debugf("[MessageAction.clickDeleteButton] 尝试直接点击操作区域")
-	return deleteBtn.Click(proto.InputMouseButtonLeft, 1)
+	// 如果没找到文字按钮，尝试找图标按钮（第二个是删除）
+	iconSelectors := []string{
+		".user-operation img",
+		"[class*='user-operation'] img",
+	}
+	for _, selector := range iconSelectors {
+		imgs, err := item.Elements(selector)
+		if err == nil && len(imgs) >= 2 {
+			// 第二个图片应该是删除图标
+			logrus.Infof("[MessageAction.clickDeleteButton] 点击第二个图标（删除）")
+			return imgs[1].Click(proto.InputMouseButtonLeft, 1)
+		}
+	}
+
+	// 最后尝试：在整个页面查找可见的删除相关按钮
+	logrus.Debugf("[MessageAction.clickDeleteButton] 在页面范围内查找删除按钮")
+	return m.clickDeleteFromPage(item)
 }
 
-// clickDeleteByText 通过文本查找并点击删除按钮
-func (m *MessageAction) clickDeleteByText() error {
-	// 尝试查找页面上的删除相关元素
-	allImgs, err := m.page.Elements("img")
-	if err != nil {
-		return errors.New("未找到任何图片元素")
+// clickDeleteFromPage 从页面范围查找并点击删除按钮
+func (m *MessageAction) clickDeleteFromPage(item *rod.Element) error {
+	// 查找页面上的下拉菜单或弹出框
+	popupSelectors := []string{
+		"[class*='dropdown-menu']",
+		"[class*='dropdown']",
+		"[class*='popup']",
+		"[class*='menu']",
+		"[class*='operate-menu']",
 	}
 
-	logrus.Debugf("[MessageAction.clickDeleteByText] 页面共有 %d 个图片元素", len(allImgs))
-
-	for i, img := range allImgs {
-		src, _ := img.Attribute("src")
-		if src != nil && strings.Contains(*src, "operater-hover") {
-			logrus.Debugf("[MessageAction.clickDeleteByText] 找到操作图标 (第 %d 个): %s", i, *src)
-			// 这个应该是操作按钮
-			if err := img.Click(proto.InputMouseButtonLeft, 1); err != nil {
-				return err
-			}
-			time.Sleep(300 * time.Millisecond)
-
-			// 点击后应该出现下拉菜单，查找删除选项
-			menuSelectors := []string{
-				"[class*='dropdown'] a",
-				"[class*='menu'] li",
-				"[class*='popup'] a",
-			}
-			for _, sel := range menuSelectors {
-				menuItems, _ := m.page.Elements(sel)
-				for _, item := range menuItems {
-					text, _ := item.Text()
+	for _, selector := range popupSelectors {
+		popups, err := m.page.Elements(selector)
+		if err == nil {
+			for _, popup := range popups {
+				// 在弹出框中找删除按钮
+				btns, _ := popup.Elements("button, a, [role='button']")
+				for _, btn := range btns {
+					text, _ := btn.Text()
 					if strings.Contains(text, "删除") {
-						logrus.Infof("[MessageAction.clickDeleteByText] 点击删除菜单项")
-						return item.Click(proto.InputMouseButtonLeft, 1)
+						logrus.Infof("[MessageAction.clickDeleteFromPage] 点击弹出菜单中的删除按钮")
+						return btn.Click(proto.InputMouseButtonLeft, 1)
 					}
 				}
 			}

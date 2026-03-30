@@ -213,15 +213,25 @@ func (s *MCPServer) GetTools() []Tool {
 		},
 		{
 			Name:        "delete_message",
-			Description: "删除消息列表中的指定消息，通过人名称、公司名称、职位名称进行匹配筛选",
+			Description: "删除消息列表中的指定消息（支持批量删除），通过人名称、公司名称、职位名称进行匹配筛选",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"person_name":  map[string]interface{}{"type": "string", "description": "人名称（HR姓名）- 必填，用于精确匹配"},
-					"company_name": map[string]interface{}{"type": "string", "description": "公司名称 - 可选，用于筛选"},
-					"job_title":    map[string]interface{}{"type": "string", "description": "职位名称 - 可选，用于筛选"},
+					"messages": map[string]interface{}{
+						"type":        "array",
+						"description": "消息列表，每条消息包含 person_name、company_name、job_title",
+						"items": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"person_name":  map[string]interface{}{"type": "string", "description": "人名称（HR姓名）- 必填"},
+								"company_name": map[string]interface{}{"type": "string", "description": "公司名称 - 可选"},
+								"job_title":    map[string]interface{}{"type": "string", "description": "职位名称 - 可选"},
+							},
+							"required": []string{"person_name"},
+						},
+					},
 				},
-				"required": []string{"person_name"},
+				"required": []string{"messages"},
 			},
 		},
 	}

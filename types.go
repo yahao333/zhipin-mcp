@@ -212,7 +212,14 @@ type MessageListResponse struct {
 }
 
 // DeleteMessageRequest 删除消息请求
+// Messages 是一组消息列表，每个消息包含 person_name、company_name、job_title
+// 表示一个需要匹配删除的消息
 type DeleteMessageRequest struct {
+	Messages []MessageFilter `json:"messages"` // 消息筛选条件列表
+}
+
+// MessageFilter 消息筛选条件
+type MessageFilter struct {
 	PersonName  string `json:"person_name"`  // 人名称（HR姓名）- 必填
 	CompanyName string `json:"company_name"` // 公司名称 - 可选
 	JobTitle    string `json:"job_title"`    // 职位名称 - 可选
@@ -220,6 +227,9 @@ type DeleteMessageRequest struct {
 
 // DeleteMessageResponse 删除消息响应
 type DeleteMessageResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	Success  bool     `json:"success"`
+	Total    int      `json:"total"`    // 总数
+	Deleted  int      `json:"deleted"`  // 成功删除数
+	Failed   int      `json:"failed"`   // 失败数
+	Messages []string `json:"messages"` // 每条消息的删除结果
 }

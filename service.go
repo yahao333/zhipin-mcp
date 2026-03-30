@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -701,16 +702,26 @@ func (s *ZhipinService) ListMessages(ctx context.Context) (*MessageListResponse,
 }
 
 // DeleteMessage 删除消息
+// 支持批量删除多个消息，每个消息通过 person_name、company_name、job_title 匹配
 func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageRequest) (*DeleteMessageResponse, error) {
 	logrus.Debugf("[ZhipinService.DeleteMessage] ========== 开始删除消息 ==========")
-	logrus.Debugf("[ZhipinService.DeleteMessage] 请求: personName=%s, companyName=%s, jobTitle=%s",
-		req.PersonName, req.CompanyName, req.JobTitle)
+	logrus.Debugf("[ZhipinService.DeleteMessage] 待删除消息数: %d", len(req.Messages))
 
-	if req.PersonName == "" {
+	if len(req.Messages) == 0 {
 		return &DeleteMessageResponse{
-			Success: false,
-			Message: "人名称（person_name）不能为空",
+			Success:  false,
+			Messages: []string{"消息列表为空"},
 		}, nil
+	}
+
+	// 检查每个消息的必填字段
+	for i, msg := range req.Messages {
+		if msg.PersonName == "" {
+			return &DeleteMessageResponse{
+				Success:  false,
+				Messages: []string{fmt.Sprintf("第 %d 条消息的 person_name 不能为空", i+1)},
+			}, nil
+		}
 	}
 
 	b := newBrowser()
@@ -734,22 +745,48 @@ func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageReq
 	}
 	logrus.Debugf("[ZhipinService.DeleteMessage] 登录状态检查通过")
 
-	// 删除消息
 	msgAction := zhipin.NewMessageAction(page)
-	err = msgAction.DeleteMessage(ctx, req.PersonName, req.CompanyName, req.JobTitle)
-	if err != nil {
-		logrus.Errorf("[ZhipinService.DeleteMessage] 删除消息失败: %v", err)
-		return &DeleteMessageResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+
+	response := &DeleteMessageResponse{
+		Total:    len(req.Messages),
+		Messages: make([]string, 0, len(req.Messages)),
 	}
 
+	// 遍历删除每个消息
+	for i, filter := range req.Messages {
+		logrus.Infof("[ZhipinService.DeleteMessage] 删除第 %d/%d 个消息: %s %s %s",
+			i+1, len(req.Messages), filter.PersonName, filter.CompanyName, filter.JobTitle)
+
+		// 先刷新页面以获取最新消息列表
+		if i > 0 {
+			logrus.Debugf("[ZhipinService.DeleteMessage] 刷新消息列表")
+			_, err := msgAction.ListMessages(ctx)
+			if err != nil {
+				logrus.Warnf("[ZhipinService.DeleteMessage] 刷新消息列表失败: %v", err)
+			}
+			// 随机延时 1-3 秒
+			time.Sleep(time.Duration(1000+rand.Intn(2000)) * time.Millisecond)
+		}
+
+		// 删除消息
+		err := msgAction.DeleteMessage(ctx, filter.PersonName, filter.CompanyName, filter.JobTitle)
+		if err != nil {
+			logrus.Errorf("[ZhipinService.DeleteMessage] 删除消息失败: %v", err)
+			response.Failed++
+			response.Messages = append(response.Messages, fmt.Sprintf("%s: 失败 - %s", filter.PersonName, err.Error()))
+		} else {
+			logrus.Infof("[ZhipinService.DeleteMessage] 删除成功: %s", filter.PersonName)
+			response.Deleted++
+			response.Messages = append(response.Messages, fmt.Sprintf("%s: 成功", filter.PersonName))
+		}
+	}
+
+	response.Success = response.Failed == 0
 	logrus.Debugf("[ZhipinService.DeleteMessage] ========== 删除消息完成 ==========")
-	return &DeleteMessageResponse{
-		Success: true,
-		Message: "消息删除成功",
-	}, nil
+	logrus.Infof("[ZhipinService.DeleteMessage] 结果: 总数=%d, 成功=%d, 失败=%d",
+		response.Total, response.Deleted, response.Failed)
+
+	return response, nil
 }
 
 // 辅助函数

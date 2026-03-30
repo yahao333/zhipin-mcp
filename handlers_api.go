@@ -237,3 +237,15 @@ func (s *AppServer) handleAPIStopCron(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "cron stopped"})
 }
+
+// handleAPIListMessages 获取消息列表
+func (s *AppServer) handleAPIListMessages(c *gin.Context) {
+	logrus.Info("API: 获取消息列表")
+
+	result, err := s.zhipinService.ListMessages(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}

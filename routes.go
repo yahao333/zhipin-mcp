@@ -49,6 +49,9 @@ func setupRoutes(app *AppServer) *gin.Engine {
 		// 定时任务
 		api.POST("/cron/start", app.handleAPIStartCron)
 		api.POST("/cron/stop", app.handleAPIStopCron)
+
+		// 消息
+		api.GET("/messages", app.handleAPIListMessages)
 	}
 
 	return router

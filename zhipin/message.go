@@ -146,10 +146,14 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 
 		// 解析人名称（HR姓名）
 		nameSelectors := []string{
+			".title-box .name-text", // BOSS直聘：title-box 下的 name-text
+			".title-box .name-box",  // 备选：完整 name-box
+			".name-text",
 			".name",
 			".person-name",
 			".chat-name",
-			"[class*='name']",
+			"[class*='name-text']",
+			"[class*='name-box']",
 			".nick-name",
 		}
 		for _, sel := range nameSelectors {
@@ -165,6 +169,8 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 
 		// 解析公司名称
 		companySelectors := []string{
+			".title-box .name-box > span:nth-child(2)", // BOSS直聘：name-box 下的第2个span
+			".title-box .name-box span:nth-child(2)",
 			".company-name",
 			"[class*='company']",
 			".sub",
@@ -182,6 +188,8 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 
 		// 解析职位名称
 		jobSelectors := []string{
+			".title-box .name-box > span:nth-child(4)", // BOSS直聘：name-box 下的第4个span（职位/HRBP）
+			".title-box .name-box span:nth-child(4)",
 			".job-title",
 			"[class*='job']",
 			".position",

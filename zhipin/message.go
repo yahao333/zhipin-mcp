@@ -207,10 +207,12 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 
 		// 解析消息摘要
 		digestSelectors := []string{
+			".last-msg-text", // BOSS直聘：消息摘要
+			".last-message",
 			".digest",
 			".message-digest",
-			".last-message",
 			"[class*='digest']",
+			"[class*='last-msg']",
 			"[class*='message']",
 		}
 		for _, sel := range digestSelectors {

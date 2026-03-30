@@ -347,6 +347,27 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 func parseRelativeTime(timeStr string) time.Time {
 	now := time.Now()
 
+	// 尝试解析 "11:52" 格式（今天的时间）
+	if strings.Contains(timeStr, ":") {
+		if t, err := time.ParseInLocation("15:04", timeStr, time.Local); err == nil {
+			return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
+		}
+	}
+
+	// 尝试解析 "03月27日" 格式
+	if strings.Contains(timeStr, "月") && strings.Contains(timeStr, "日") {
+		// 替换月日为标准格式
+		formatted := strings.ReplaceAll(timeStr, "月", "-")
+		formatted = strings.ReplaceAll(formatted, "日", "")
+		if t, err := time.ParseInLocation("2006-01-02", formatted, time.Local); err == nil {
+			// 如果年份解析为0，使用当前年份
+			if t.Year() == 0 {
+				t = time.Date(now.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
+			}
+			return t
+		}
+	}
+
 	// 尝试解析常见格式
 	// 今天
 	if strings.Contains(timeStr, "今天") || strings.Contains(timeStr, "今日") {

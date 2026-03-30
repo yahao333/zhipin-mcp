@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/sirupsen/logrus"
-	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 // MessageStatus 消息状态
@@ -71,7 +70,6 @@ func (m *MessageAction) ListMessages(ctx context.Context) (*MessageList, error) 
 	// 解析消息列表
 	logrus.Debugf("[MessageAction.ListMessages] 开始解析消息列表...")
 
-	debug.WritePageHTMLToFile(m.page, "messages.html")
 	messages, err := m.parseMessageList()
 	if err != nil {
 		logrus.Errorf("[MessageAction.ListMessages] parseMessageList 失败: %v", err)

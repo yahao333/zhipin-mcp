@@ -90,6 +90,9 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 
 	// 尝试多个选择器找到消息列表容器
 	listSelectors := []string{
+		".friend-item",                   // BOSS直聘的消息项类名
+		"[role='listitem']",              // role="listitem" 的 li 元素
+		"ul[class*='conversation'] > li", // conversation 容器的直接 li 子元素
 		".chat-item",
 		".dialog-item",
 		".message-item",
@@ -122,6 +125,22 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 	// 解析每个消息项
 	for i, item := range items {
 		logrus.Debugf("[MessageAction.parseMessageList] 解析第 %d/%d 个消息项", i+1, len(items))
+
+		// 调试：打印当前消息项的 HTML 结构（如果有 figure 的话）
+		if figEl, err := item.Element(".figure"); err == nil {
+			if html, err := figEl.HTML(); err == nil {
+				if len(html) > 500 {
+					html = html[:500] + "..."
+				}
+				logrus.Debugf("[MessageAction.parseMessageList] .figure HTML: %s", html)
+			}
+		} else {
+			logrus.Debugf("[MessageAction.parseMessageList] 未找到 .figure 元素, err=%v", err)
+			// 打印当前元素的 class 属性
+			if classAttr, err := item.Attribute("class"); err == nil && classAttr != nil {
+				logrus.Debugf("[MessageAction.parseMessageList] 当前元素 class=%s", *classAttr)
+			}
+		}
 
 		msg := Message{}
 
@@ -215,28 +234,66 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 			}
 		}
 
-		// 解析未读数量
+		// 解析未读数量 - 注意 notice-badge 在 figure 元素内部
 		unreadSelectors := []string{
+			".figure .notice-badge",
+			"span.notice-badge",
+			"[class*='notice-badge']",
 			".unread",
-			"[class*='unread']",
 			".badge",
 		}
+		logrus.Debugf("[MessageAction.parseMessageList] (unread) 开始解析未读数量，候选选择器数量=%d", len(unreadSelectors))
+		originalUnread := msg.UnreadCount
 		for _, sel := range unreadSelectors {
+			logrus.Debugf("[MessageAction.parseMessageList] (unread) 尝试选择器: %s", sel)
 			el, err := item.Element(sel)
-			if err == nil {
-				unreadStr, _ := el.Text()
-				unreadStr = strings.TrimSpace(unreadStr)
-				if unreadStr != "" && unreadStr != "0" {
-					// 尝试解析数字
-					var count int
-					if _, err := parseInt(unreadStr); err == nil {
-						count, _ = parseInt(unreadStr)
-						msg.UnreadCount = count
-					}
-					break
-				}
+			if err != nil {
+				logrus.Debugf("[MessageAction.parseMessageList] (unread) 选择器未命中: %s, err=%v", sel, err)
+				continue
 			}
+
+			unreadRaw, textErr := el.Text()
+			unreadStr := strings.TrimSpace(unreadRaw)
+
+			classAttr, _ := el.Attribute("class")
+			classVal := ""
+			if classAttr != nil {
+				classVal = *classAttr
+			}
+
+			if html, htmlErr := el.HTML(); htmlErr == nil {
+				htmlSnippet := html
+				if len(htmlSnippet) > 200 {
+					htmlSnippet = htmlSnippet[:200] + "..."
+				}
+				logrus.Debugf("[MessageAction.parseMessageList] (unread) 命中选择器=%s, rawText=%q, trimText=%q, class=%q, htmlLen=%d, htmlSnippet=%q, textErr=%v",
+					sel, unreadRaw, unreadStr, classVal, len(html), htmlSnippet, textErr)
+			} else {
+				logrus.Debugf("[MessageAction.parseMessageList] (unread) 命中选择器=%s, rawText=%q, trimText=%q, class=%q, htmlErr=%v, textErr=%v",
+					sel, unreadRaw, unreadStr, classVal, htmlErr, textErr)
+			}
+
+			if unreadStr != "" && unreadStr != "0" {
+				count, parseErr := parseInt(unreadStr)
+				logrus.Debugf("[MessageAction.parseMessageList] (unread) 尝试解析文本为数字: text=%q, count=%d, parseErr=%v", unreadStr, count, parseErr)
+				if count > 0 {
+					msg.UnreadCount = count
+				}
+			} else if unreadStr == "" {
+				hasClass, _, hasErr := el.Has("span.notice-badge")
+				logrus.Debugf("[MessageAction.parseMessageList] (unread) 文本为空，尝试通过结构判断是否未读: hasSpanNoticeBadge=%v, hasErr=%v, currentUnread=%d",
+					hasClass, hasErr, msg.UnreadCount)
+				if hasClass {
+					msg.UnreadCount = 1
+				}
+			} else {
+				logrus.Debugf("[MessageAction.parseMessageList] (unread) 文本为 0，视为无未读: text=%q", unreadStr)
+			}
+
+			logrus.Debugf("[MessageAction.parseMessageList] (unread) 选择器=%s 解析完成: originalUnread=%d -> currentUnread=%d", sel, originalUnread, msg.UnreadCount)
+			break
 		}
+		logrus.Debugf("[MessageAction.parseMessageList] (unread) 解析未读数量结束: finalUnread=%d", msg.UnreadCount)
 
 		// 判断消息状态
 		if msg.UnreadCount > 0 {
@@ -245,8 +302,9 @@ func (m *MessageAction) parseMessageList() ([]Message, error) {
 			msg.Status = MessageStatusRead
 		}
 
-		// 解析头像
+		// 解析头像 - 使用 figure img 选择器
 		avatarSelectors := []string{
+			".figure img",
 			"img[src*='avatar']",
 			".avatar img",
 			"[class*='avatar'] img",

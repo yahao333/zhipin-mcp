@@ -288,6 +288,7 @@ help:
 	@echo "  api-batch-deliver   批量投递"
 	@echo "  api-delivered        已投递列表"
 	@echo "  api-stats            投递统计"
+	@echo "  api-list-messages    消息列表"
 	@echo "  api-config-get       获取配置"
 	@echo "  api-config-update    更新配置"
 	@echo "  api-cron-start       启动定时任务"
@@ -386,6 +387,12 @@ api-delivered:
 api-stats:
 	@echo "==> 投递统计"
 	curl -s $(API_BASE)/api/stats
+
+# 消息列表
+.PHONY: api-list-messages
+api-list-messages:
+	@echo "==> 消息列表"
+	curl -s $(API_BASE)/api/messages
 
 # 获取配置
 .PHONY: api-config-get

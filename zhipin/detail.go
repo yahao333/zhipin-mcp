@@ -8,7 +8,6 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 // Detail 职位详情操作
@@ -65,8 +64,8 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 		UpdatedAt: time.Now(),
 	}
 
-	time.Sleep(5 * time.Second)
-	debug.WritePageHTMLToFile(d.page, "detail.html")
+	// time.Sleep(5 * time.Second)
+	// debug.WritePageHTMLToFile(d.page, "detail.html")
 
 	// 获取职位标题
 	logrus.Debugf("[Detail.parseJobDetail] 查找职位标题 .job-title")

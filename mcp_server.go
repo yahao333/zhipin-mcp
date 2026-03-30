@@ -61,6 +61,8 @@ func (s *MCPServer) HandleToolCall(ctx context.Context, call MCPToolCall) *MCPTo
 		return appServer.handleUpdateConfig(ctx, call.Arguments)
 	case "get_stats":
 		return appServer.handleGetStats(ctx)
+	case "list_messages":
+		return appServer.handleListMessages(ctx)
 	default:
 		return &MCPToolResult{
 			Content: []MCPContent{{
@@ -200,6 +202,11 @@ func (s *MCPServer) GetTools() []Tool {
 		{
 			Name:        "get_stats",
 			Description: "获取投递统计",
+			InputSchema: map[string]interface{}{"type": "object"},
+		},
+		{
+			Name:        "list_messages",
+			Description: "获取消息列表，返回已登录用户的聊天消息列表（人名称、公司名称、职位、消息摘要、时间、未读数、状态）",
 			InputSchema: map[string]interface{}{"type": "object"},
 		},
 	}

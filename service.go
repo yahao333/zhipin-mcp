@@ -659,6 +659,47 @@ func (s *ZhipinService) StopCron(ctx context.Context, taskID int) error {
 	return UpdateCronTask(taskID, false)
 }
 
+// ListMessages 获取消息列表
+func (s *ZhipinService) ListMessages(ctx context.Context) (*MessageListResponse, error) {
+	logrus.Debugf("[ZhipinService.ListMessages] ========== 开始获取消息列表 ==========")
+
+	b := newBrowser()
+	defer b.Close()
+	logrus.Debugf("[ZhipinService.ListMessages] 浏览器实例创建完成")
+
+	page := b.NewPage()
+	defer page.Close()
+	logrus.Debugf("[ZhipinService.ListMessages] 页面实例创建完成")
+
+	// 检查登录状态
+	loginAction := zhipin.NewLogin(page)
+	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
+	if err != nil {
+		logrus.Errorf("[ZhipinService.ListMessages] 检查登录状态失败: %v", err)
+		return nil, err
+	}
+	if !isLoggedIn {
+		logrus.Warnf("[ZhipinService.ListMessages] 未登录")
+		return nil, errLoginRequired
+	}
+	logrus.Debugf("[ZhipinService.ListMessages] 登录状态检查通过")
+
+	// 获取消息列表
+	msgAction := zhipin.NewMessageAction(page)
+	result, err := msgAction.ListMessages(ctx)
+	if err != nil {
+		logrus.Errorf("[ZhipinService.ListMessages] msgAction.ListMessages 失败: %v", err)
+		return nil, err
+	}
+
+	logrus.Debugf("[ZhipinService.ListMessages] 获取到消息: %d 条", len(result.Messages))
+	logrus.Debugf("[ZhipinService.ListMessages] ========== 获取消息列表完成 ==========")
+
+	return &MessageListResponse{
+		Messages: convertMessages(result.Messages),
+	}, nil
+}
+
 // 辅助函数
 
 func newBrowser() *headless_browser.Browser {
@@ -743,6 +784,27 @@ func convertJob(job *zhipin.Job) Job {
 		Description: job.Description,
 		Tags:        job.Tags,
 		UpdatedAt:   job.UpdatedAt,
+	}
+}
+
+func convertMessages(messages []zhipin.Message) []Message {
+	result := make([]Message, len(messages))
+	for i, msg := range messages {
+		result[i] = convertMessage(&msg)
+	}
+	return result
+}
+
+func convertMessage(msg *zhipin.Message) Message {
+	return Message{
+		PersonName:    msg.PersonName,
+		CompanyName:   msg.CompanyName,
+		JobTitle:      msg.JobTitle,
+		Avatar:        msg.Avatar,
+		MessageDigest: msg.MessageDigest,
+		Time:          msg.Time,
+		UnreadCount:   msg.UnreadCount,
+		Status:        MessageStatus(msg.Status),
 	}
 }
 

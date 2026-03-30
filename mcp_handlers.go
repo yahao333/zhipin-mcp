@@ -482,6 +482,42 @@ func (s *AppServer) handleGetStats(ctx context.Context) *MCPToolResult {
 	}
 }
 
+// handleListMessages 处理获取消息列表
+func (s *AppServer) handleListMessages(ctx context.Context) *MCPToolResult {
+	logrus.Info("MCP: 获取消息列表")
+
+	result, err := s.zhipinService.ListMessages(ctx)
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "获取消息列表失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	if len(result.Messages) == 0 {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "暂无消息"}},
+		}
+	}
+
+	text := fmt.Sprintf("共 %d 条消息:\n\n", len(result.Messages))
+	for i, msg := range result.Messages {
+		text += fmt.Sprintf("%d. %s\n", i+1, msg.PersonName)
+		text += fmt.Sprintf("   公司: %s\n", msg.CompanyName)
+		text += fmt.Sprintf("   职位: %s\n", msg.JobTitle)
+		text += fmt.Sprintf("   最新消息: %s\n", msg.MessageDigest)
+		text += fmt.Sprintf("   时间: %s\n", msg.Time.Format("2006-01-02 15:04"))
+		if msg.UnreadCount > 0 {
+			text += fmt.Sprintf("   未读: %d\n", msg.UnreadCount)
+		}
+		text += fmt.Sprintf("   状态: %s\n\n", msg.Status)
+	}
+
+	return &MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: text}},
+	}
+}
+
 // 辅助函数：解析JSON
 func parseJSON(v interface{}) (map[string]interface{}, error) {
 	data, err := json.Marshal(v)

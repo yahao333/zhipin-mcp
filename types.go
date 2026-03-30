@@ -184,3 +184,29 @@ type MCPToolResult struct {
 	Content []MCPContent `json:"content"`
 	IsError bool         `json:"is_error,omitempty"`
 }
+
+// MessageStatus 消息状态
+type MessageStatus string
+
+const (
+	MessageStatusDelivered MessageStatus = "delivered" // 已送达
+	MessageStatusRead      MessageStatus = "read"      // 已读
+	MessageStatusUnknown   MessageStatus = "unknown"   // 未知
+)
+
+// Message 消息
+type Message struct {
+	PersonName    string        `json:"person_name"`    // 人名称（HR姓名）
+	CompanyName   string        `json:"company_name"`   // 公司名称
+	JobTitle      string        `json:"job_title"`      // 职位名称
+	Avatar        string        `json:"avatar"`         // 头像URL
+	MessageDigest string        `json:"message_digest"` // 消息摘要
+	Time          time.Time     `json:"time"`           // 时间
+	UnreadCount   int           `json:"unread_count"`   // 未读数量
+	Status        MessageStatus `json:"status"`         // 状态
+}
+
+// MessageListResponse 消息列表响应
+type MessageListResponse struct {
+	Messages []Message `json:"messages"`
+}

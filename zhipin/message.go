@@ -2,10 +2,12 @@ package zhipin
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/sirupsen/logrus"
 )
 
@@ -428,4 +430,271 @@ func parseInt(s string) (int, error) {
 		}
 	}
 	return num, nil
+}
+
+// DeleteMessage 删除消息
+// 通过 person_name, company_name, job_title 匹配消息，然后点击删除按钮
+func (m *MessageAction) DeleteMessage(ctx context.Context, personName, companyName, jobTitle string) error {
+	logrus.Debugf("[MessageAction.DeleteMessage] ========== 开始删除消息 ==========")
+	logrus.Debugf("[MessageAction.DeleteMessage] 筛选条件: personName=%s, companyName=%s, jobTitle=%s", personName, companyName, jobTitle)
+
+	// 步骤1: 获取消息列表
+	messages, err := m.ListMessages(ctx)
+	if err != nil {
+		logrus.Errorf("[MessageAction.DeleteMessage] 获取消息列表失败: %v", err)
+		return err
+	}
+	logrus.Debugf("[MessageAction.DeleteMessage] 获取到 %d 条消息", len(messages.Messages))
+
+	// 步骤2: 查找匹配的消息
+	var targetItem rod.Elements
+	var found bool
+
+	for _, selector := range []string{".friend-item", "[role='listitem']", ".chat-item", ".dialog-item", ".message-item"} {
+		items, err := m.page.Elements(selector)
+		if err != nil || len(items) == 0 {
+			continue
+		}
+
+		for i, item := range items {
+			// 获取当前项的文本内容进行匹配
+			itemText, _ := item.Text()
+			logrus.Debugf("[MessageAction.DeleteMessage] 检查第 %d 个元素, 文本长度: %d", i, len(itemText))
+
+			// 查找匹配的消息
+			var nameEl interface{ Text() (string, error) }
+			for _, sel := range []string{".title-box .name-text", ".name-text", ".name"} {
+				if el, err := item.Element(sel); err == nil {
+					nameEl = el
+					break
+				}
+			}
+			if nameEl == nil {
+				continue
+			}
+
+			nameText, _ := nameEl.Text()
+			nameText = strings.TrimSpace(nameText)
+			logrus.Debugf("[MessageAction.DeleteMessage] 匹配人名: %s vs %s", nameText, personName)
+
+			// 模糊匹配人名
+			if personName != "" && !strings.Contains(nameText, personName) {
+				continue
+			}
+
+			// 获取公司名称
+			companyMatch := true
+			if companyName != "" {
+				var cEl interface{ Text() (string, error) }
+				for _, sel := range []string{".title-box .name-box > span:nth-child(2)", ".company-name", "[class*='company']"} {
+					if el, err := item.Element(sel); err == nil {
+						cEl = el
+						break
+					}
+				}
+				if cEl != nil {
+					cText, _ := cEl.Text()
+					cText = strings.TrimSpace(cText)
+					companyMatch = strings.Contains(cText, companyName)
+					logrus.Debugf("[MessageAction.DeleteMessage] 匹配公司: %s vs %s, 匹配=%v", cText, companyName, companyMatch)
+				}
+			}
+
+			// 获取职位名称
+			jobMatch := true
+			if jobTitle != "" {
+				var jEl interface{ Text() (string, error) }
+				for _, sel := range []string{".title-box .name-box > span:nth-child(4)", ".job-title", "[class*='job']"} {
+					if el, err := item.Element(sel); err == nil {
+						jEl = el
+						break
+					}
+				}
+				if jEl != nil {
+					jText, _ := jEl.Text()
+					jText = strings.TrimSpace(jText)
+					jobMatch = strings.Contains(jText, jobTitle)
+					logrus.Debugf("[MessageAction.DeleteMessage] 匹配职位: %s vs %s, 匹配=%v", jText, jobTitle, jobMatch)
+				}
+			}
+
+			// 所有条件都匹配
+			if companyMatch && jobMatch {
+				targetItem = rod.Elements{item}
+				found = true
+				logrus.Infof("[MessageAction.DeleteMessage] 找到匹配的消息，人名: %s", nameText)
+				break
+			}
+		}
+
+		if found {
+			break
+		}
+	}
+
+	if !found {
+		logrus.Warnf("[MessageAction.DeleteMessage] 未找到匹配的消息")
+		return errors.New("未找到匹配的消息")
+	}
+
+	// 步骤3: 鼠标悬停到目标元素，显示操作按钮
+	item := targetItem[0]
+	logrus.Debugf("[MessageAction.DeleteMessage] 鼠标悬停到消息项")
+
+	// 使用 MouseHover 方法替代 Hover
+	err = item.Hover()
+	if err != nil {
+		logrus.Errorf("[MessageAction.DeleteMessage] Hover 失败: %v", err)
+		return err
+	}
+
+	// 等待按钮出现
+	time.Sleep(500 * time.Millisecond)
+
+	// 步骤4: 查找并点击删除按钮
+	logrus.Debugf("[MessageAction.DeleteMessage] 查找删除按钮")
+	err = m.clickDeleteButton(item)
+	if err != nil {
+		logrus.Errorf("[MessageAction.DeleteMessage] 点击删除按钮失败: %v", err)
+		return err
+	}
+
+	logrus.Infof("[MessageAction.DeleteMessage] ========== 删除消息完成 ==========")
+	return nil
+}
+
+// clickDeleteButton 在消息项中点击删除按钮
+func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
+	logrus.Debugf("[MessageAction.clickDeleteButton] 开始查找删除按钮")
+
+	// 尝试多种选择器定位删除按钮
+	deleteSelectors := []string{
+		".user-operation",           // 用户操作容器
+		"[class*='user-operation']", // 包含 user-operation 的元素
+		"[class*='operate']",        // 包含 operate 的元素
+		".icon-operate",             // 操作图标
+		"[class*='icon-operate']",   // 包含 icon-operate 的元素
+	}
+
+	var deleteBtn *rod.Element
+
+	for _, selector := range deleteSelectors {
+		logrus.Debugf("[MessageAction.clickDeleteButton] 尝试选择器: %s", selector)
+		els, err := item.Elements(selector)
+		if err == nil && len(els) > 0 {
+			logrus.Debugf("[MessageAction.clickDeleteButton] 选择器 %s 找到 %d 个元素", selector, len(els))
+			// 找到操作按钮容器
+			deleteBtn = els[0]
+			break
+		}
+	}
+
+	if deleteBtn == nil {
+		logrus.Warnf("[MessageAction.clickDeleteButton] 未找到操作按钮，尝试在父元素中查找")
+		// 尝试在整个消息列表区域查找
+		operateSelectors := []string{
+			".friend-item:hover .user-operation",
+			"[role='listitem']:hover .user-operation",
+			".chat-item:hover [class*='operate']",
+		}
+		for _, sel := range operateSelectors {
+			els, err := m.page.Elements(sel)
+			if err == nil && len(els) > 0 {
+				deleteBtn = els[0]
+				break
+			}
+		}
+	}
+
+	if deleteBtn == nil {
+		// 最后尝试通过文本定位删除按钮
+		logrus.Debugf("[MessageAction.clickDeleteButton] 尝试通过文本查找删除按钮")
+		return m.clickDeleteByText()
+	}
+
+	// 获取按钮的 HTML 用于调试
+	if html, err := deleteBtn.HTML(); err == nil {
+		logrus.Debugf("[MessageAction.clickDeleteButton] 操作按钮HTML长度: %d", len(html))
+		if len(html) > 300 {
+			html = html[:300] + "..."
+		}
+		logrus.Debugf("[MessageAction.clickDeleteButton] 操作按钮HTML: %s", html)
+	}
+
+	// 鼠标悬停到操作按钮以显示删除选项
+	logrus.Debugf("[MessageAction.clickDeleteButton] 鼠标悬停到操作按钮")
+	if err := deleteBtn.Hover(); err != nil {
+		logrus.Warnf("[MessageAction.clickDeleteButton] Hover 操作按钮失败: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	// 查找删除按钮（可能是带有特定class或者文本的按钮）
+	deleteBtnSelectors := []string{
+		"img[src*='delete']",
+		"[class*='delete']",
+		"button[class*='delete']",
+		".icon-operate-hover",        // 删除图标悬停状态
+		"img[src*='operater-hover']", // 操作图标悬停状态
+	}
+
+	for _, sel := range deleteBtnSelectors {
+		btns, err := deleteBtn.Elements(sel)
+		if err == nil && len(btns) > 0 {
+			logrus.Debugf("[MessageAction.clickDeleteButton] 找到删除按钮候选: %s", sel)
+			// 第一个是置顶，第二个是删除
+			if len(btns) >= 2 {
+				logrus.Infof("[MessageAction.clickDeleteButton] 点击第2个按钮（删除）")
+				return btns[1].Click(proto.InputMouseButtonLeft, 1)
+			}
+			// 如果只有一个，可能是删除按钮
+			return btns[0].Click(proto.InputMouseButtonLeft, 1)
+		}
+	}
+
+	// 尝试直接点击操作按钮区域
+	logrus.Debugf("[MessageAction.clickDeleteButton] 尝试直接点击操作区域")
+	return deleteBtn.Click(proto.InputMouseButtonLeft, 1)
+}
+
+// clickDeleteByText 通过文本查找并点击删除按钮
+func (m *MessageAction) clickDeleteByText() error {
+	// 尝试查找页面上的删除相关元素
+	allImgs, err := m.page.Elements("img")
+	if err != nil {
+		return errors.New("未找到任何图片元素")
+	}
+
+	logrus.Debugf("[MessageAction.clickDeleteByText] 页面共有 %d 个图片元素", len(allImgs))
+
+	for i, img := range allImgs {
+		src, _ := img.Attribute("src")
+		if src != nil && strings.Contains(*src, "operater-hover") {
+			logrus.Debugf("[MessageAction.clickDeleteByText] 找到操作图标 (第 %d 个): %s", i, *src)
+			// 这个应该是操作按钮
+			if err := img.Click(proto.InputMouseButtonLeft, 1); err != nil {
+				return err
+			}
+			time.Sleep(300 * time.Millisecond)
+
+			// 点击后应该出现下拉菜单，查找删除选项
+			menuSelectors := []string{
+				"[class*='dropdown'] a",
+				"[class*='menu'] li",
+				"[class*='popup'] a",
+			}
+			for _, sel := range menuSelectors {
+				menuItems, _ := m.page.Elements(sel)
+				for _, item := range menuItems {
+					text, _ := item.Text()
+					if strings.Contains(text, "删除") {
+						logrus.Infof("[MessageAction.clickDeleteByText] 点击删除菜单项")
+						return item.Click(proto.InputMouseButtonLeft, 1)
+					}
+				}
+			}
+		}
+	}
+
+	return errors.New("未找到删除按钮")
 }

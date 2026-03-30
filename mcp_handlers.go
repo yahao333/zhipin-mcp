@@ -518,6 +518,47 @@ func (s *AppServer) handleListMessages(ctx context.Context) *MCPToolResult {
 	}
 }
 
+// handleDeleteMessage 处理删除消息
+func (s *AppServer) handleDeleteMessage(ctx context.Context, args map[string]interface{}) *MCPToolResult {
+	logrus.Info("MCP: 删除消息")
+
+	personName, _ := args["person_name"].(string)
+	companyName, _ := args["company_name"].(string)
+	jobTitle, _ := args["job_title"].(string)
+
+	if personName == "" {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "请提供人名称（person_name）用于匹配要删除的消息"}},
+			IsError: true,
+		}
+	}
+
+	req := &DeleteMessageRequest{
+		PersonName:  personName,
+		CompanyName: companyName,
+		JobTitle:    jobTitle,
+	}
+
+	result, err := s.zhipinService.DeleteMessage(ctx, req)
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "删除消息失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	var text string
+	if result.Success {
+		text = fmt.Sprintf("✅ 消息删除成功！\n\n筛选条件:\n- 人名称: %s\n- 公司: %s\n- 职位: %s", personName, companyName, jobTitle)
+	} else {
+		text = fmt.Sprintf("❌ 删除消息失败\n\n原因: %s", result.Message)
+	}
+
+	return &MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: text}},
+	}
+}
+
 // 辅助函数：解析JSON
 func parseJSON(v interface{}) (map[string]interface{}, error) {
 	data, err := json.Marshal(v)

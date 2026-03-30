@@ -63,6 +63,8 @@ func (s *MCPServer) HandleToolCall(ctx context.Context, call MCPToolCall) *MCPTo
 		return appServer.handleGetStats(ctx)
 	case "list_messages":
 		return appServer.handleListMessages(ctx)
+	case "delete_message":
+		return appServer.handleDeleteMessage(ctx, call.Arguments)
 	default:
 		return &MCPToolResult{
 			Content: []MCPContent{{
@@ -208,6 +210,19 @@ func (s *MCPServer) GetTools() []Tool {
 			Name:        "list_messages",
 			Description: "获取消息列表，返回已登录用户的聊天消息列表（人名称、公司名称、职位、消息摘要、时间、未读数、状态）",
 			InputSchema: map[string]interface{}{"type": "object"},
+		},
+		{
+			Name:        "delete_message",
+			Description: "删除消息列表中的指定消息，通过人名称、公司名称、职位名称进行匹配筛选",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"person_name":  map[string]interface{}{"type": "string", "description": "人名称（HR姓名）- 必填，用于精确匹配"},
+					"company_name": map[string]interface{}{"type": "string", "description": "公司名称 - 可选，用于筛选"},
+					"job_title":    map[string]interface{}{"type": "string", "description": "职位名称 - 可选，用于筛选"},
+				},
+				"required": []string{"person_name"},
+			},
 		},
 	}
 }

@@ -700,6 +700,58 @@ func (s *ZhipinService) ListMessages(ctx context.Context) (*MessageListResponse,
 	}, nil
 }
 
+// DeleteMessage 删除消息
+func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageRequest) (*DeleteMessageResponse, error) {
+	logrus.Debugf("[ZhipinService.DeleteMessage] ========== 开始删除消息 ==========")
+	logrus.Debugf("[ZhipinService.DeleteMessage] 请求: personName=%s, companyName=%s, jobTitle=%s",
+		req.PersonName, req.CompanyName, req.JobTitle)
+
+	if req.PersonName == "" {
+		return &DeleteMessageResponse{
+			Success: false,
+			Message: "人名称（person_name）不能为空",
+		}, nil
+	}
+
+	b := newBrowser()
+	defer b.Close()
+	logrus.Debugf("[ZhipinService.DeleteMessage] 浏览器实例创建完成")
+
+	page := b.NewPage()
+	defer page.Close()
+	logrus.Debugf("[ZhipinService.DeleteMessage] 页面实例创建完成")
+
+	// 检查登录状态
+	loginAction := zhipin.NewLogin(page)
+	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
+	if err != nil {
+		logrus.Errorf("[ZhipinService.DeleteMessage] 检查登录状态失败: %v", err)
+		return nil, err
+	}
+	if !isLoggedIn {
+		logrus.Warnf("[ZhipinService.DeleteMessage] 未登录")
+		return nil, errLoginRequired
+	}
+	logrus.Debugf("[ZhipinService.DeleteMessage] 登录状态检查通过")
+
+	// 删除消息
+	msgAction := zhipin.NewMessageAction(page)
+	err = msgAction.DeleteMessage(ctx, req.PersonName, req.CompanyName, req.JobTitle)
+	if err != nil {
+		logrus.Errorf("[ZhipinService.DeleteMessage] 删除消息失败: %v", err)
+		return &DeleteMessageResponse{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+
+	logrus.Debugf("[ZhipinService.DeleteMessage] ========== 删除消息完成 ==========")
+	return &DeleteMessageResponse{
+		Success: true,
+		Message: "消息删除成功",
+	}, nil
+}
+
 // 辅助函数
 
 func newBrowser() *headless_browser.Browser {

@@ -210,3 +210,16 @@ type Message struct {
 type MessageListResponse struct {
 	Messages []Message `json:"messages"`
 }
+
+// DeleteMessageRequest 删除消息请求
+type DeleteMessageRequest struct {
+	PersonName  string `json:"person_name"`  // 人名称（HR姓名）- 必填
+	CompanyName string `json:"company_name"` // 公司名称 - 可选
+	JobTitle    string `json:"job_title"`    // 职位名称 - 可选
+}
+
+// DeleteMessageResponse 删除消息响应
+type DeleteMessageResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}

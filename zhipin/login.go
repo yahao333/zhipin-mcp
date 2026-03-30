@@ -13,8 +13,6 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-
-	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page, error) {
@@ -178,7 +176,7 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)
 
-	debug.WritePageHTMLToFile(pp, "data.html")
+	// debug.WritePageHTMLToFile(pp, "data.html")
 
 	// 检查是否已经登录
 	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")

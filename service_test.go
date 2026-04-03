@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/yahao333/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/pkg/delay"
 	"github.com/yahao333/zhipin-mcp/zhipin"
 )
 
@@ -424,7 +425,7 @@ func TestRandomDelay(t *testing.T) {
 
 	// 多次调用确保不会 panic
 	for i := 0; i < 10; i++ {
-		randomDelay()
+		delay.Random()
 	}
 }
 

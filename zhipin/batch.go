@@ -2,11 +2,9 @@ package zhipin
 
 import (
 	"context"
-	"math/rand"
-	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/yahao333/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/pkg/delay"
 )
 
 // Batch 批量投递操作
@@ -27,7 +25,7 @@ func (b *Batch) DeliverJobs(ctx context.Context, jobs []Job) ([]DeliverResult, e
 		logrus.Infof("批量投递进度: %d/%d - %s", i+1, len(jobs), job.Title)
 
 		// 随机延时
-		b.randomDelay()
+		delay.Random()
 
 		// 投递
 		result, err := b.deliver.DeliverJob(ctx, job.ID)
@@ -40,24 +38,9 @@ func (b *Batch) DeliverJobs(ctx context.Context, jobs []Job) ([]DeliverResult, e
 
 		// 投递成功后延时
 		if result.Success {
-			b.randomDelay()
+			delay.Random()
 		}
 	}
 
 	return results, nil
-}
-
-// randomDelay 随机延时
-func (b *Batch) randomDelay() {
-	minDelay := configs.MinDelay
-	maxDelay := configs.MaxDelay
-	if minDelay <= 0 {
-		minDelay = 3000
-	}
-	if maxDelay <= 0 {
-		maxDelay = 8000
-	}
-
-	delay := minDelay + rand.Intn(maxDelay-minDelay)
-	time.Sleep(time.Duration(delay) * time.Millisecond)
 }

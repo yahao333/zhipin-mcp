@@ -17,6 +17,7 @@ import (
 	"github.com/yahao333/zhipin-mcp/browser"
 	"github.com/yahao333/zhipin-mcp/configs"
 	"github.com/yahao333/zhipin-mcp/cookies"
+	"github.com/yahao333/zhipin-mcp/pkg/delay"
 	"github.com/yahao333/zhipin-mcp/zhipin"
 )
 
@@ -481,7 +482,7 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 
 		// 随机延时
 		logrus.Debugf("[Service.BatchDeliver] 执行随机延时 (3-8秒)")
-		randomDelay()
+		delay.Random()
 
 		// 投递
 		logrus.Debugf("[Service.BatchDeliver] 执行投递: %s", jobID)
@@ -832,20 +833,6 @@ func saveQrcodeImage(base64Data string) error {
 
 	path := filepath.Join(dir, "qrcode.png")
 	return os.WriteFile(path, imgData, 0644)
-}
-
-func randomDelay() {
-	minDelay := configs.MinDelay
-	maxDelay := configs.MaxDelay
-	if minDelay <= 0 {
-		minDelay = 3000
-	}
-	if maxDelay <= 0 {
-		maxDelay = 8000
-	}
-
-	delay := minDelay + rand.Intn(maxDelay-minDelay)
-	time.Sleep(time.Duration(delay) * time.Millisecond)
 }
 
 func convertJobs(jobs []zhipin.Job) []Job {

@@ -12,7 +12,7 @@ import (
 	"github.com/go-rod/rod/lib/input"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/yahao333/zhipin-mcp/configs"
+	"github.com/yahao333/zhipin-mcp/pkg/delay"
 )
 
 // Search 搜索操作
@@ -55,7 +55,7 @@ func (s *Search) SearchJobs(ctx context.Context, params SearchParams) (*SearchRe
 	// ===== DEBUG: 步骤3 - 随机延时 =====
 	logrus.Debugf("[DEBUG SearchJobs] 步骤3: 执行随机延时")
 	delayStart := time.Now()
-	randomDelay()
+	delay.Random()
 	logrus.Debugf("[DEBUG SearchJobs] 随机延时完成, 耗时: %v", time.Since(delayStart))
 
 	// ===== DEBUG: 步骤4 - 执行搜索交互 =====
@@ -593,17 +593,4 @@ func extractTitleAndSalary(fullTitle string) (title, salary string) {
 
 	// 没有找到薪资，返回原始文本
 	return fullTitle, ""
-}
-
-// randomDelay 随机延时
-func randomDelay() {
-	minDelay := configs.MinDelay
-	maxDelay := configs.MaxDelay
-	if minDelay <= 0 {
-		minDelay = 3000
-	}
-	if maxDelay <= 0 {
-		maxDelay = 8000
-	}
-	time.Sleep(time.Duration(minDelay) * time.Millisecond)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/yahao333/zhipin-mcp/pkg/debug"
+	"github.com/yahao333/zhipin-mcp/pkg/delay"
 )
 
 // MessageStatus 消息状态
@@ -707,6 +708,7 @@ func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
 	// 先 hover 到 item
 	item.Hover()
 	time.Sleep(500 * time.Millisecond)
+	logrus.Debugf("[MessageAction.clickDeleteButton] hover 到 item 完成")
 
 	// 获取 user-operation 元素
 	var userOpEl *rod.Element
@@ -1043,7 +1045,7 @@ func (m *MessageAction) findDeleteInVisibleMenus() bool {
 							})`
 							if _, err := menuItem.Eval(jsClick); err == nil {
 								logrus.Infof("[MessageAction.findDeleteInVisibleMenus] JS点击删除成功")
-								time.Sleep(800 * time.Millisecond)
+								delay.Short()
 								if m.handleDeleteConfirm() {
 									return true
 								}
@@ -1051,7 +1053,7 @@ func (m *MessageAction) findDeleteInVisibleMenus() bool {
 								// 回退：使用鼠标点击
 								if err := menuItem.Click(proto.InputMouseButtonLeft, 1); err == nil {
 									logrus.Infof("[MessageAction.findDeleteInVisibleMenus] 鼠标点击删除成功")
-									time.Sleep(800 * time.Millisecond)
+									delay.Short()
 									if m.handleDeleteConfirm() {
 										return true
 									}
@@ -1070,9 +1072,10 @@ func (m *MessageAction) findDeleteInVisibleMenus() bool {
 // BOSS直聘删除消息后会弹出确认对话框，需要点击确认
 func (m *MessageAction) handleDeleteConfirm() bool {
 	logrus.Debugf("[MessageAction.handleDeleteConfirm] 检查是否有删除确认对话框...")
+	debug.WritePageHTMLToFile(m.page, "toast_delete.html")
 
 	// 等待对话框出现
-	time.Sleep(500 * time.Millisecond)
+	delay.Short()
 
 	// 先输出页面上的弹窗信息用于调试
 	jsCheckPopup := `(function() {
@@ -1102,62 +1105,88 @@ func (m *MessageAction) handleDeleteConfirm() bool {
 		}
 		return result;
 	})()`
-	popupResult, _ := m.page.Eval(jsCheckPopup)
-	logrus.Debugf("[MessageAction.handleDeleteConfirm] 弹窗信息: %s", popupResult.Value.String())
+	popupResult, err := m.page.Eval(jsCheckPopup)
+	if err == nil && popupResult != nil {
+		logrus.Debugf("[MessageAction.handleDeleteConfirm] 弹窗信息: %s", popupResult.Value.String())
+	} else {
+		logrus.Debugf("[MessageAction.handleDeleteConfirm] 获取弹窗信息失败: %v", err)
+	}
 
 	// 尝试使用 JS 直接处理确认弹窗（最可靠的方式）
 	jsHandleConfirm := `(function() {
-		// 查找确认弹窗和其中的确认按钮
+		// BOSS直聘对话框结构：
+		// div[data-type="boss-dialog"]
+		//   └── div.boss-popup__content
+		//         └── div.boss-dialog__footer
+		//               └── span.boss-dialog__button (取消)
+		//               └── span.boss-dialog__button (确定)
+
+		// 优先：查找 BOSS直聘确认对话框中的"确定"按钮
+		var dialogContents = document.querySelectorAll('div[data-type="boss-dialog"] .boss-popup__content');
+		for (var i = 0; i < dialogContents.length; i++) {
+			var style = window.getComputedStyle(dialogContents[i]);
+			var isVisible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+			if (!isVisible) continue;
+
+			// 在 boss-dialog__footer 中查找按钮
+			var footerBtns = dialogContents[i].querySelectorAll('.boss-dialog__footer span');
+			for (var j = 0; j < footerBtns.length; j++) {
+				var text = footerBtns[j].textContent.trim();
+				// 找"确定"按钮（跳过"取消"）
+				if (text === '确定' || text === '确认') {
+					footerBtns[j].click();
+					return 'clicked: ' + text;
+				}
+			}
+		}
+
+		// 回退：查找其他确认弹窗
 		var popups = document.querySelectorAll('[class*="modal"], [class*="dialog"], [class*="confirm"], [role="dialog"]');
 		for (var i = 0; i < popups.length; i++) {
 			var style = window.getComputedStyle(popups[i]);
 			var isVisible = style.display !== 'none' && style.visibility !== 'hidden';
 			if (isVisible) {
 				// 查找确认/确定/删除按钮
-				var btns = popups[i].querySelectorAll('button, [class*="btn"]');
+				var btns = popups[i].querySelectorAll('button, [class*="btn"], span[class*="button"]');
 				for (var j = 0; j < btns.length; j++) {
 					var text = btns[j].textContent.trim();
-					if (text === '确认' || text === '确定' || text === '删除' || text === 'Yes' || text === 'OK') {
+					if (text === '确定' || text === '确认' || text === 'Yes') {
 						btns[j].click();
 						return 'clicked: ' + text;
-					}
-				}
-				// 查找包含确认文字的元素
-				var allElements = popups[i].querySelectorAll('*');
-				for (var k = 0; k < allElements.length; k++) {
-					var text = allElements[k].textContent.trim();
-					if (text === '确认' || text === '确定' || text === '删除') {
-						// 尝试点击父元素
-						if (allElements[k].parentElement) {
-							allElements[k].parentElement.click();
-							return 'clicked parent: ' + text;
-						}
 					}
 				}
 			}
 		}
 		return 'no_confirm_found';
 	})()`
-	confirmResult, _ := m.page.Eval(jsHandleConfirm)
-	logrus.Infof("[MessageAction.handleDeleteConfirm] JS确认结果: %s", confirmResult.Value.String())
+	confirmResult, err := m.page.Eval(jsHandleConfirm)
+	if err != nil {
+		logrus.Warnf("[MessageAction.handleDeleteConfirm] JS执行失败: %v", err)
+	} else if confirmResult == nil {
+		logrus.Warnf("[MessageAction.handleDeleteConfirm] JS返回结果为 nil")
+	} else {
+		resultStr := confirmResult.Value.String()
+		logrus.Infof("[MessageAction.handleDeleteConfirm] JS确认结果: %s", resultStr)
 
-	if confirmResult.Value.String() != "no_confirm_found" {
-		logrus.Infof("[MessageAction.handleDeleteConfirm] 确认操作完成")
-		time.Sleep(500 * time.Millisecond)
-		return true
+		if resultStr != "no_confirm_found" {
+			logrus.Infof("[MessageAction.handleDeleteConfirm] 确认操作完成")
+			delay.Short()
+			return true
+		}
 	}
 
 	// 回退：使用 go-rod 查找确认按钮
 	confirmSelectors := []string{
-		"button:text('确认')",
+		".boss-dialog__button",      // BOSS直聘对话框按钮
+		".dialog__button",           // 对话框按钮
+		"[class*='dialog__button']", // 其他对话框按钮
+		"span:text('确定')",           // 包含"确定"的 span
+		"span:text('确认')",           // 包含"确认"的 span
 		"button:text('确定')",
-		"button:text('删除')",
-		"button:text('OK')",
-		"[class*='confirm']",
+		"button:text('确认')",
 		"[class*='btn-confirm']",
 		"[class*='btn-ok']",
 		".btn-primary",
-		".btn-danger",
 	}
 
 	for _, sel := range confirmSelectors {
@@ -1167,20 +1196,24 @@ func (m *MessageAction) handleDeleteConfirm() bool {
 				text, _ := btn.Text()
 				text = strings.TrimSpace(text)
 				logrus.Debugf("[MessageAction.handleDeleteConfirm] 检查按钮: %s", text)
-				// 检查是否是确认按钮
-				if text == "确认" || text == "确定" || text == "删除" || text == "OK" {
+				// 跳过"取消"按钮
+				if text == "取消" {
+					continue
+				}
+				// 点击"确定"或"确认"按钮
+				if text == "确定" || text == "确认" {
 					logrus.Infof("[MessageAction.handleDeleteConfirm] 点击确认按钮: %s", text)
 					// 使用 JS 点击更可靠
 					jsClick := `(function() { this.click(); })`
 					if _, err := btn.Eval(jsClick); err == nil {
 						logrus.Infof("[MessageAction.handleDeleteConfirm] JS点击确认成功")
-						time.Sleep(500 * time.Millisecond)
+						delay.Short()
 						return true
 					}
 					// 回退到鼠标点击
 					if err := btn.Click(proto.InputMouseButtonLeft, 1); err == nil {
 						logrus.Infof("[MessageAction.handleDeleteConfirm] 点击确认成功")
-						time.Sleep(500 * time.Millisecond)
+						delay.Short()
 						return true
 					}
 				}

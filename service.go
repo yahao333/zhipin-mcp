@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -759,18 +758,16 @@ func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageReq
 			i+1, len(req.Messages), filter.PersonName, filter.CompanyName, filter.JobTitle)
 
 		// 先刷新页面以获取最新消息列表
-		if i > 0 {
-			logrus.Debugf("[ZhipinService.DeleteMessage] 刷新消息列表")
-			_, err := msgAction.ListMessages(ctx)
-			if err != nil {
-				logrus.Warnf("[ZhipinService.DeleteMessage] 刷新消息列表失败: %v", err)
-			}
-			// 随机延时 1-3 秒
-			time.Sleep(time.Duration(1000+rand.Intn(2000)) * time.Millisecond)
+		logrus.Debugf("[ZhipinService.DeleteMessage] 刷新消息列表")
+		_, err := msgAction.ListMessages(ctx)
+		if err != nil {
+			logrus.Warnf("[ZhipinService.DeleteMessage] 刷新消息列表失败: %v", err)
 		}
+		// 随机延时 1-3 秒
+		delay.Short()
 
 		// 删除消息
-		err := msgAction.DeleteMessage(ctx, filter.PersonName, filter.CompanyName, filter.JobTitle)
+		err = msgAction.DeleteMessage(ctx, filter.PersonName, filter.CompanyName, filter.JobTitle)
 		if err != nil {
 			logrus.Errorf("[ZhipinService.DeleteMessage] 删除消息失败: %v", err)
 			response.Failed++

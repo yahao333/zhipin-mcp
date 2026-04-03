@@ -34,6 +34,19 @@ func TestRandom(t *testing.T) {
 	}
 }
 
+func TestShort(t *testing.T) {
+	// 测试多次调用，确保在 500-2500ms 范围内
+	for i := 0; i < 5; i++ {
+		start := time.Now()
+		Short()
+		elapsed := int(time.Since(start).Milliseconds())
+
+		if elapsed < 500 || elapsed > 2600 { // 允许一些误差
+			t.Errorf("Short() 延时超出范围: got %dms, want between 500-2500ms", elapsed)
+		}
+	}
+}
+
 func TestRandomWithRange(t *testing.T) {
 	minMs := 100
 	maxMs := 200

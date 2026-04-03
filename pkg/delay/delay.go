@@ -7,6 +7,12 @@ import (
 	"github.com/yahao333/zhipin-mcp/configs"
 )
 
+// Short 短延时，1-3秒
+func Short() {
+	delayMs := 500 + rand.Intn(2000)
+	time.Sleep(time.Duration(delayMs) * time.Millisecond)
+}
+
 // Random 随机延时，使用配置文件中的 min_delay 和 max_delay
 // 默认范围：3-8秒
 func Random() {

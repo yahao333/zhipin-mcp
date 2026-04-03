@@ -9,6 +9,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/sirupsen/logrus"
+	"github.com/yahao333/zhipin-mcp/pkg/debug"
 )
 
 // MessageStatus 消息状态
@@ -539,6 +540,15 @@ func (m *MessageAction) DeleteMessage(ctx context.Context, personName, companyNa
 
 	// 步骤3: 鼠标悬停到目标元素，显示操作按钮
 	item := targetItem[0]
+	// 打印 targetItem 的 HTML 信息用于调试
+	if html, err := item.HTML(); err == nil {
+		// if len(html) > 1000 {
+		// 	html = html[:1000] + "..."
+		// }
+		logrus.Debugf("[MessageAction.DeleteMessage] targetItem HTML: %s", html)
+	} else {
+		logrus.Debugf("[MessageAction.DeleteMessage] 获取 targetItem HTML 失败: %v", err)
+	}
 	logrus.Debugf("[MessageAction.DeleteMessage] 鼠标悬停到消息项")
 
 	// 使用 MouseHover 方法替代 Hover
@@ -563,11 +573,142 @@ func (m *MessageAction) DeleteMessage(ctx context.Context, personName, companyNa
 	return nil
 }
 
-// clickDeleteButton 在消息项中点击删除按钮
-func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
-	logrus.Debugf("[MessageAction.clickDeleteButton] 开始查找删除按钮")
+// moveMouseTo 使用 go-rod 的 Mouse.MoveToElement 方法移动鼠标到元素
+func (m *MessageAction) moveMouseTo(el *rod.Element) error {
+	// 调试：先打印元素信息
+	elInfo, _ := el.HTML()
+	if len(elInfo) > 200 {
+		elInfo = elInfo[:200] + "..."
+	}
+	logrus.Debugf("[MessageAction.moveMouseTo] 元素HTML: %s", elInfo)
 
-	// 步骤1: 找到 user-operation 元素
+	// 使用 el.Eval() 获取元素的 getBoundingClientRect 信息用于调试
+	result, err := el.Eval(`function() {
+		var rect = this.getBoundingClientRect();
+		return {
+			left: rect.left,
+			top: rect.top,
+			width: rect.width,
+			height: rect.height,
+			x: rect.left + rect.width / 2,
+			y: rect.top + rect.height / 2
+		};
+	}`)
+	if err == nil {
+		resultStr := result.Value.JSON("", "")
+		logrus.Debugf("[MessageAction.moveMouseTo] getBoundingClientRect: %s", resultStr)
+	}
+
+	// 使用 go-rod 的 Mouse.MoveToElement 方法移动鼠标到元素中心
+	// 这个方法会自动处理元素的定位
+	logrus.Debugf("[MessageAction.moveMouseTo] 使用 Mouse.MoveToElement 移动鼠标到元素")
+	err = el.Hover()
+	if err != nil {
+		logrus.Errorf("[MessageAction.moveMouseTo] Hover 失败: %v", err)
+		return err
+	}
+
+	logrus.Debugf("[MessageAction.moveMouseTo] 鼠标移动完成")
+	return nil
+}
+
+// clickDeleteButton 在消息项中点击删除按钮
+// 交互流程：
+// 1. Hover 到消息项 → 显示灰色的三个点图标
+// 2. Hover 到 user-operation → 灰色图标变为高亮
+// 3. 点击高亮的图标 → 显示下拉菜单
+func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
+	logrus.Debugf("[MessageAction.clickDeleteButton] ========== 开始点击删除按钮 ==========")
+
+	// 调试：打印 item 的 HTML 结构
+	itemHTML, _ := item.HTML()
+	if len(itemHTML) > 300 {
+		itemHTML = itemHTML[:300] + "..."
+	}
+	logrus.Debugf("[MessageAction.clickDeleteButton] item HTML: %s", itemHTML)
+
+	// 策略1: 使用 JS 触发 mouseenter 事件 + 模拟点击
+	logrus.Infof("[MessageAction.clickDeleteButton] 策略1: 使用 JS 触发 mouseenter 事件")
+
+	// 简化的 JS：直接触发事件并点击，不使用任何数组方法
+	jsClickUserOp := `(function() {
+		var result = { success: false, message: '' };
+
+		// 查找 user-operation
+		var userOp = document.querySelector('[role="listitem"] .user-operation');
+		if (!userOp) {
+			userOp = document.querySelector('.friend-item .user-operation');
+		}
+		if (!userOp) {
+			userOp = document.querySelector('li .user-operation');
+		}
+		if (!userOp) {
+			userOp = document.querySelector('.user-operation');
+		}
+
+		if (!userOp) {
+			return { success: false, message: '未找到 user-operation' };
+		}
+
+		// 触发 mouseenter 事件
+		var event1 = new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window });
+		userOp.dispatchEvent(event1);
+
+		var event2 = new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window });
+		userOp.dispatchEvent(event2);
+
+		// 等待 200ms 让图标出现
+		var startTime = Date.now();
+		while (Date.now() - startTime < 500) {
+			// 查找高亮的图标
+			var hoverIcon = userOp.querySelector('.list-operate-hover');
+			if (!hoverIcon) {
+				hoverIcon = userOp.querySelector('img.icon-operate.list-operate-hover');
+			}
+			if (!hoverIcon) {
+				hoverIcon = userOp.querySelector('img.list-operate-hover');
+			}
+
+			if (hoverIcon) {
+				hoverIcon.click();
+				return { success: true, message: '点击高亮图标成功' };
+			}
+		}
+
+		// 如果高亮图标找不到，点击 user-operation 内的 img
+		var img = userOp.querySelector('img');
+		if (img) {
+			img.click();
+			return { success: true, message: '点击 img 成功' };
+		}
+
+		return { success: false, message: '未找到可点击元素' };
+	})()`
+
+	jsResult, err := m.page.Eval(jsClickUserOp)
+	if err != nil {
+		logrus.Errorf("[MessageAction.clickDeleteButton] JS 执行失败: %v", err)
+	} else {
+		resultStr := jsResult.Value.String()
+		logrus.Infof("[MessageAction.clickDeleteButton] JS 执行结果: %s", resultStr)
+
+		if strings.Contains(resultStr, `"success":true`) || strings.Contains(resultStr, `"success": true`) {
+			time.Sleep(800 * time.Millisecond)
+			// 调用 clickDeleteFromMenu 查找删除按钮
+			if err := m.clickDeleteFromMenu(); err == nil {
+				return nil
+			}
+		}
+	}
+
+	// 策略2: 使用 go-rod 的 Hover + Click
+	logrus.Warnf("[MessageAction.clickDeleteButton] 策略1失败，使用策略2: go-rod Hover + Click")
+
+	// 先 hover 到 item
+	item.Hover()
+	time.Sleep(500 * time.Millisecond)
+
+	// 获取 user-operation 元素
 	var userOpEl *rod.Element
 	userOpSelectors := []string{
 		".user-operation",
@@ -575,118 +716,330 @@ func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
 	}
 
 	for _, selector := range userOpSelectors {
-		logrus.Debugf("[MessageAction.clickDeleteButton] 查找 user-operation: %s", selector)
-		els, err := item.Elements(selector)
-		if err == nil && len(els) > 0 {
+		els, _ := item.Elements(selector)
+		if len(els) > 0 {
 			userOpEl = els[0]
-			logrus.Debugf("[MessageAction.clickDeleteButton] 找到 user-operation 元素")
+			logrus.Debugf("[MessageAction.clickDeleteButton] 找到 user-operation")
 			break
 		}
 	}
 
-	if userOpEl == nil {
-		logrus.Errorf("[MessageAction.clickDeleteButton] 未找到 user-operation 元素")
-		return errors.New("未找到 user-operation 元素")
-	}
+	if userOpEl != nil {
+		// Hover 到 user-operation
+		userOpEl.Hover()
+		time.Sleep(800 * time.Millisecond)
 
-	// 获取 user-operation 的 HTML 用于调试
-	if html, err := userOpEl.HTML(); err == nil {
-		logrus.Debugf("[MessageAction.clickDeleteButton] user-operation HTML: %s", html)
-	}
+		// 尝试点击 list-operate-hover（高亮图标）
+		hoverSelectors := []string{
+			".list-operate-hover",
+			"img.list-operate-hover",
+			"img.icon-operate.list-operate-hover",
+		}
 
-	// 步骤2: 鼠标移动到 user-operation 上（使用 Mouse 方法精确控制）
-	logrus.Debugf("[MessageAction.clickDeleteButton] 鼠标移动到 user-operation")
-	if err := userOpEl.Hover(); err != nil {
-		logrus.Errorf("[MessageAction.clickDeleteButton] Hover user-operation 失败: %v", err)
-		return err
-	}
-
-	// 等待下拉菜单出现（按钮：置顶、删除）
-	time.Sleep(800 * time.Millisecond)
-
-	// 步骤3: 查找出现的按钮（置顶和删除）
-	// 根据用户描述，悬停后会出现"置顶"和"删除"两个按钮
-	logrus.Debugf("[MessageAction.clickDeleteButton] 查找下拉菜单按钮")
-
-	// 尝试多种选择器找到下拉菜单中的按钮
-	menuBtnSelectors := []string{
-		".user-operation button",
-		".user-operation a",
-		".user-operation [class*='btn']",
-		".user-operation [role='button']",
-		"[class*='dropdown'] button",
-		"[class*='dropdown'] a",
-		"[class*='menu'] button",
-		"[class*='menu'] a",
-		"[class*='popup'] button",
-		"[class*='popup'] a",
-	}
-
-	for _, selector := range menuBtnSelectors {
-		btns, err := item.Elements(selector)
-		if err == nil && len(btns) > 0 {
-			logrus.Debugf("[MessageAction.clickDeleteButton] 选择器 %s 找到 %d 个按钮", selector, len(btns))
-			for i, btn := range btns {
-				text, _ := btn.Text()
-				logrus.Debugf("[MessageAction.clickDeleteButton] 按钮 %d 文本: %s", i, text)
+		for _, sel := range hoverSelectors {
+			els, _ := userOpEl.Elements(sel)
+			if len(els) > 0 {
+				logrus.Infof("[MessageAction.clickDeleteButton] 点击高亮图标: %s", sel)
+				if err := els[0].Click(proto.InputMouseButtonLeft, 1); err == nil {
+					time.Sleep(800 * time.Millisecond)
+					if err := m.clickDeleteFromMenu(); err == nil {
+						return nil
+					}
+				}
 			}
-			// 找"删除"按钮（通常在第二个位置：置顶、删除）
-			for _, btn := range btns {
-				text, _ := btn.Text()
-				if strings.Contains(text, "删除") {
-					logrus.Infof("[MessageAction.clickDeleteButton] 点击删除按钮")
-					return btn.Click(proto.InputMouseButtonLeft, 1)
+		}
+
+		// 如果高亮图标找不到，点击 user-operation 内的任何 img
+		els, _ := userOpEl.Elements("img")
+		if len(els) > 0 {
+			logrus.Infof("[MessageAction.clickDeleteButton] 点击 user-operation 内的 img")
+			if err := els[0].Click(proto.InputMouseButtonLeft, 1); err == nil {
+				time.Sleep(800 * time.Millisecond)
+				if err := m.clickDeleteFromMenu(); err == nil {
+					return nil
 				}
 			}
 		}
 	}
 
-	// 如果没找到文字按钮，尝试找图标按钮（第二个是删除）
-	iconSelectors := []string{
-		".user-operation img",
-		"[class*='user-operation'] img",
-	}
-	for _, selector := range iconSelectors {
-		imgs, err := item.Elements(selector)
-		if err == nil && len(imgs) >= 2 {
-			// 第二个图片应该是删除图标
-			logrus.Infof("[MessageAction.clickDeleteButton] 点击第二个图标（删除）")
-			return imgs[1].Click(proto.InputMouseButtonLeft, 1)
-		}
-	}
+	// 策略3: 直接点击 item 元素
+	logrus.Warnf("[MessageAction.clickDeleteButton] 策略2失败，使用策略3: 直接点击 item")
+	item.Click(proto.InputMouseButtonLeft, 1)
+	time.Sleep(500 * time.Millisecond)
 
-	// 最后尝试：在整个页面查找可见的删除相关按钮
-	logrus.Debugf("[MessageAction.clickDeleteButton] 在页面范围内查找删除按钮")
-	return m.clickDeleteFromPage(item)
+	return m.clickDeleteFromMenu()
 }
 
 // clickDeleteFromPage 从页面范围查找并点击删除按钮
 func (m *MessageAction) clickDeleteFromPage(item *rod.Element) error {
-	// 查找页面上的下拉菜单或弹出框
-	popupSelectors := []string{
-		"[class*='dropdown-menu']",
-		"[class*='dropdown']",
-		"[class*='popup']",
-		"[class*='menu']",
-		"[class*='operate-menu']",
-	}
+	logrus.Debugf("[MessageAction.clickDeleteFromPage] ========== 从页面范围查找删除按钮 ==========")
 
-	for _, selector := range popupSelectors {
-		popups, err := m.page.Elements(selector)
-		if err == nil {
-			for _, popup := range popups {
-				// 在弹出框中找删除按钮
-				btns, _ := popup.Elements("button, a, [role='button']")
-				for _, btn := range btns {
-					text, _ := btn.Text()
-					if strings.Contains(text, "删除") {
-						logrus.Infof("[MessageAction.clickDeleteFromPage] 点击弹出菜单中的删除按钮")
-						return btn.Click(proto.InputMouseButtonLeft, 1)
+	// 增加重试机制
+	maxRetries := 2
+	for retry := 0; retry < maxRetries; retry++ {
+		if retry > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+
+		// 查找页面上的下拉菜单或弹出框
+		popupSelectors := []string{
+			".operation-container",
+			"[class*='dropdown-menu']",
+			"[class*='dropdown']",
+			"[class*='popup']",
+			"[class*='menu']",
+			"[class*='operate-menu']",
+			"[class*='popover']",
+		}
+
+		for _, selector := range popupSelectors {
+			popups, err := m.page.Elements(selector)
+			if err == nil {
+				logrus.Debugf("[MessageAction.clickDeleteFromPage] 选择器 %s 找到 %d 个弹出框", selector, len(popups))
+				for _, popup := range popups {
+					// 使用 JS 检查是否可见
+					jsVisible := `(function() {
+						var style = window.getComputedStyle(this);
+						return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+					})`
+					result, err := popup.Eval(jsVisible)
+					if err != nil || !result.Value.Bool() {
+						continue
+					}
+
+					// 在弹出框中找删除按钮
+					btns, _ := popup.Elements("button, a, [role='button'], li, [class*='item']")
+					for _, btn := range btns {
+						text, _ := btn.Text()
+						text = strings.TrimSpace(text)
+						logrus.Debugf("[MessageAction.clickDeleteFromPage] 弹出框内按钮文本: '%s'", text)
+						if strings.Contains(text, "删除") {
+							logrus.Infof("[MessageAction.clickDeleteFromPage] 点击弹出菜单中的删除按钮: '%s'", text)
+							return btn.Click(proto.InputMouseButtonLeft, 1)
+						}
 					}
 				}
 			}
 		}
 	}
 
+	logrus.Warnf("[MessageAction.clickDeleteFromPage] 经过 %d 次重试仍未找到删除按钮", maxRetries)
 	return errors.New("未找到删除按钮")
+}
+
+// clickDeleteFromMenu 点击三个点图标后出现的下拉菜单中的删除按钮
+func (m *MessageAction) clickDeleteFromMenu() error {
+	logrus.Debugf("[MessageAction.clickDeleteFromMenu] ========== 查找下拉菜单中的删除按钮 ==========")
+
+	// 增加重试机制：等待菜单出现（最多4次，每次间隔800ms）
+	maxRetries := 4
+	for retry := 0; retry < maxRetries; retry++ {
+		if retry > 0 {
+			logrus.Debugf("[MessageAction.clickDeleteFromMenu] 第 %d 次重试，等待菜单出现...", retry+1)
+			time.Sleep(800 * time.Millisecond)
+		}
+
+		// 调试：检查页面上所有可能的菜单/弹出元素
+		jsCheck := `(function() {
+			var containers = document.querySelectorAll('[class*="dropdown"], [class*="menu"], [class*="popup"], [class*="popover"], .operation-container, .operate-menu');
+			var result = [];
+			for (var i = 0; i < Math.min(containers.length, 10); i++) {
+				var style = window.getComputedStyle(containers[i]);
+				var isVisible = style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+				if (isVisible) {
+					result.push({
+						index: i,
+						className: containers[i].className,
+						display: style.display,
+						visibility: style.visibility,
+						opacity: style.opacity,
+						html: containers[i].outerHTML.substring(0, 500)
+					});
+				}
+			}
+			return { visibleCount: result.length, items: result };
+		})()`
+		opResult, err := m.page.Eval(jsCheck)
+		if err == nil {
+			logrus.Debugf("[MessageAction.clickDeleteFromMenu] 可见菜单元素 (尝试 %d): %s", retry+1, opResult.Value.String())
+		}
+
+		// 输出当前全部的 html 内容
+		_, err = m.page.HTML()
+		if err == nil {
+			debug.WritePageHTMLToFile(m.page, "delete_menu.html")
+		}
+
+		// 策略1: 直接在页面范围内查找可见的菜单
+		foundDelete := m.findDeleteInVisibleMenus()
+		if foundDelete {
+			return nil
+		}
+
+		// 策略2: 尝试点击 body 空白处关闭可能存在的其他菜单，然后重新触发
+		if retry == 0 {
+			logrus.Debugf("[MessageAction.clickDeleteFromMenu] 策略2: 点击 body 空白处关闭其他菜单")
+			bodyClick := `(function() {
+				document.body.click();
+				return 'body clicked';
+			})()`
+			m.page.Eval(bodyClick)
+			time.Sleep(300 * time.Millisecond)
+		}
+	}
+
+	// 所有重试都失败，打印最终页面状态
+	logrus.Warnf("[MessageAction.clickDeleteFromMenu] 经过 %d 次重试仍未找到删除按钮", maxRetries)
+
+	// 打印页面中所有可能的操作按钮
+	jsAllButtons := `(function() {
+		var btns = document.querySelectorAll('button, a, [role="button"], [role="menuitem"]');
+		var result = [];
+		for (var i = 0; i < Math.min(btns.length, 30); i++) {
+			var style = window.getComputedStyle(btns[i]);
+			if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+				result.push({
+					text: btns[i].innerText.substring(0, 50),
+					className: btns[i].className,
+					display: style.display
+				});
+			}
+		}
+		return result;
+	})()`
+	btnResult, err := m.page.Eval(jsAllButtons)
+	if err == nil {
+		logrus.Debugf("[MessageAction.clickDeleteFromMenu] 页面可见按钮列表: %s", btnResult.Value.String())
+	}
+
+	return errors.New("未找到删除菜单项")
+}
+
+// findDeleteInVisibleMenus 在页面可见的菜单中查找并点击删除按钮
+func (m *MessageAction) findDeleteInVisibleMenus() bool {
+	// 下拉菜单可能的选择器
+	menuSelectors := []string{
+		".ui-dropmenu-list",    // BOSS直聘：消息操作下拉菜单
+		".operation-container", // 动态生成的下拉容器
+		"[class*='dropdown-menu']",
+		"[class*='operate-menu']",
+		"[class*='user-menu']",
+		"[class*='action-menu']",
+		"[class*='context-menu']",
+		"[class*='popover']",
+		"[class*='popup']",
+		"ul[class*='menu']",
+		"ul.more-setting", // BOSS直聘：消息菜单 ul.more-setting
+		"div[class*='menu']",
+		"[class*='operate']",
+		"[class*='action']",
+	}
+
+	for _, menuSel := range menuSelectors {
+		menus, err := m.page.Elements(menuSel)
+		if err == nil {
+			logrus.Debugf("[MessageAction.findDeleteInVisibleMenus] 选择器 %s 找到 %d 个菜单", menuSel, len(menus))
+			for _, menu := range menus {
+				if menu == nil {
+					continue
+				}
+
+				// 检查菜单是否可见
+				jsVisible := `(function() {
+					var style = window.getComputedStyle(this);
+					return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+				})`
+				result, err := menu.Eval(jsVisible)
+				if err != nil || !result.Value.Bool() {
+					continue
+				}
+
+				// 打印菜单 HTML 用于调试
+				menuHTML, _ := menu.HTML()
+				if len(menuHTML) > 200 {
+					logrus.Debugf("[MessageAction.findDeleteInVisibleMenus] 菜单 %s HTML预览: %s...", menuSel, menuHTML[:min(200, len(menuHTML))])
+				}
+
+				// 查找菜单项（多种选择器组合）
+				itemSelectors := []string{
+					"ul.more-setting li",  // BOSS直聘：优先使用 more-setting
+					"li[data-v-ed616276]", // BOSS直聘：带 data-v 属性的 li
+					"li",
+					"[class*='menu-item']",
+					"[class*='dropdown-item']",
+					"[class*='item']",
+					"button",
+					"a",
+					"[role='menuitem']",
+					"span",
+					"div",
+				}
+
+				// 策略1: 直接查找包含"删除"文字的 span 元素（BOSS直聘结构）
+				deleteSpanSelectors := []string{
+					"span:text('删除')", // go-rod 内置文本选择器
+					"span:has-text('删除')",
+				}
+				for _, sel := range deleteSpanSelectors {
+					spans, err := menu.Elements(sel)
+					if err == nil {
+						for _, span := range spans {
+							text, _ := span.Text()
+							if strings.Contains(text, "删除") {
+								logrus.Infof("[MessageAction.findDeleteInVisibleMenus] 找到删除 span: %s", text)
+								// 点击 span 的父级 li（删除按钮的实际可点击区域）
+								if li, err := span.Element("xpath/.."); err == nil {
+									if err := li.Click(proto.InputMouseButtonLeft, 1); err == nil {
+										logrus.Infof("[MessageAction.findDeleteInVisibleMenus] 点击删除 li 成功")
+										return true
+									}
+								}
+								// 直接点击 span
+								if err := span.Click(proto.InputMouseButtonLeft, 1); err == nil {
+									logrus.Infof("[MessageAction.findDeleteInVisibleMenus] 点击删除 span 成功")
+									return true
+								}
+							}
+						}
+					}
+				}
+
+				// 策略2: 遍历所有菜单项查找"删除"
+				for _, itemSel := range itemSelectors {
+					items, _ := menu.Elements(itemSel)
+					for _, menuItem := range items {
+						text, _ := menuItem.Text()
+						text = strings.TrimSpace(text)
+						if text == "" {
+							continue
+						}
+						logrus.Debugf("[MessageAction.findDeleteInVisibleMenus] 菜单项文本: '%s'", text)
+
+						// 查找包含"删除"文字的菜单项
+						if strings.Contains(text, "删除") {
+							logrus.Infof("[MessageAction.findDeleteInVisibleMenus] 点击删除菜单项: '%s'", text)
+							if err := menuItem.Click(proto.InputMouseButtonLeft, 1); err == nil {
+								return true
+							}
+							// 如果点击失败，尝试 JS 点击
+							jsClick := `(function() { this.click(); })`
+							if _, err := menuItem.Eval(jsClick); err == nil {
+								logrus.Infof("[MessageAction.findDeleteInVisibleMenus] JS点击删除菜单项成功")
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// min 返回两个整数中的较小值
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

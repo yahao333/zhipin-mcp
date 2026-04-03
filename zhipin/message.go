@@ -615,159 +615,113 @@ func (m *MessageAction) moveMouseTo(el *rod.Element) error {
 
 // clickDeleteButton 在消息项中点击删除按钮
 // 交互流程：
-// 1. Hover 到消息项 → 显示灰色的三个点图标
-// 2. Hover 到 user-operation → 灰色图标变为高亮
-// 3. 点击高亮的图标 → 显示下拉菜单
+// 1. Hover 到消息项 → 显示灰色的三个点图标 (.list-operate)
+// 2. Hover 到灰色图标 → CSS 切换到高亮图标 (.list-operate-hover)
+// 3. 点击高亮图标 → 弹出菜单
 func (m *MessageAction) clickDeleteButton(item *rod.Element) error {
 	logrus.Debugf("[MessageAction.clickDeleteButton] ========== 开始点击删除按钮 ==========")
 
-	// 调试：打印 item 的 HTML 结构
-	itemHTML, _ := item.HTML()
-	if len(itemHTML) > 300 {
-		itemHTML = itemHTML[:300] + "..."
-	}
-	logrus.Debugf("[MessageAction.clickDeleteButton] item HTML: %s", itemHTML)
+	// 策略1: 使用 JS 直接操作（最可靠）
+	// JS 可以直接触发正确的鼠标事件序列
+	logrus.Infof("[MessageAction.clickDeleteButton] 策略1: 使用 JS 直接点击")
 
-	// 策略1: 使用 JS 触发 mouseenter 事件 + 模拟点击
-	logrus.Infof("[MessageAction.clickDeleteButton] 策略1: 使用 JS 触发 mouseenter 事件")
-
-	// 简化的 JS：直接触发事件并点击，不使用任何数组方法
-	jsClickUserOp := `(function() {
-		var result = { success: false, message: '' };
-
-		// 查找 user-operation
-		var userOp = document.querySelector('[role="listitem"] .user-operation');
-		if (!userOp) {
-			userOp = document.querySelector('.friend-item .user-operation');
-		}
-		if (!userOp) {
-			userOp = document.querySelector('li .user-operation');
-		}
-		if (!userOp) {
-			userOp = document.querySelector('.user-operation');
-		}
-
-		if (!userOp) {
-			return { success: false, message: '未找到 user-operation' };
-		}
-
-		// 触发 mouseenter 事件
-		var event1 = new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window });
-		userOp.dispatchEvent(event1);
-
-		var event2 = new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window });
-		userOp.dispatchEvent(event2);
-
-		// 等待 200ms 让图标出现
-		var startTime = Date.now();
-		while (Date.now() - startTime < 500) {
-			// 查找高亮的图标
-			var hoverIcon = userOp.querySelector('.list-operate-hover');
-			if (!hoverIcon) {
-				hoverIcon = userOp.querySelector('img.icon-operate.list-operate-hover');
-			}
-			if (!hoverIcon) {
-				hoverIcon = userOp.querySelector('img.list-operate-hover');
+	jsClick := `(function() {
+		try {
+			// 查找目标 item 内的 user-operation
+			var userOp = this.querySelector('.user-operation');
+			if (!userOp) {
+				return '未找到 user-operation';
 			}
 
-			if (hoverIcon) {
-				hoverIcon.click();
-				return { success: true, message: '点击高亮图标成功' };
+			// 触发正确的鼠标事件序列
+			var mouseEvents = ['mouseenter', 'mouseover', 'mousein'];
+			for (var i = 0; i < mouseEvents.length; i++) {
+				var evt = new MouseEvent(mouseEvents[i], {
+					bubbles: true,
+					cancelable: true,
+					view: window
+				});
+				userOp.dispatchEvent(evt);
 			}
+
+			// 查找并点击图标
+			var icon = userOp.querySelector('.list-operate');
+			if (!icon) {
+				icon = userOp.querySelector('.list-operate-hover');
+			}
+			if (!icon) {
+				icon = userOp.querySelector('img');
+			}
+
+			if (icon) {
+				icon.click();
+				return '点击图标成功';
+			}
+
+			// 回退：点击 user-operation 本身
+			userOp.click();
+			return '点击 user-operation 成功';
+		} catch (e) {
+			return 'JS错误: ' + e.message;
 		}
+	})`
 
-		// 如果高亮图标找不到，点击 user-operation 内的 img
-		var img = userOp.querySelector('img');
-		if (img) {
-			img.click();
-			return { success: true, message: '点击 img 成功' };
-		}
-
-		return { success: false, message: '未找到可点击元素' };
-	})()`
-
-	jsResult, err := m.page.Eval(jsClickUserOp)
+	jsResult, err := item.Eval(jsClick)
 	if err != nil {
 		logrus.Errorf("[MessageAction.clickDeleteButton] JS 执行失败: %v", err)
-	} else {
+	} else if jsResult != nil {
 		resultStr := jsResult.Value.String()
-		logrus.Infof("[MessageAction.clickDeleteButton] JS 执行结果: %s", resultStr)
+		logrus.Infof("[MessageAction.clickDeleteButton] JS 结果: %s", resultStr)
+	}
 
-		if strings.Contains(resultStr, `"success":true`) || strings.Contains(resultStr, `"success": true`) {
-			time.Sleep(800 * time.Millisecond)
-			// 调用 clickDeleteFromMenu 查找删除按钮
-			if err := m.clickDeleteFromMenu(); err == nil {
+	// 等待菜单出现
+	delay.Short()
+
+	// 处理菜单
+	if m.clickDeleteFromMenu() == nil {
+		return nil
+	}
+
+	// 策略2: 使用 go-rod hover + 点击灰色图标
+	logrus.Warnf("[MessageAction.clickDeleteButton] 策略2: 使用 go-rod hover + 点击")
+
+	item.Hover()
+	delay.Short()
+
+	userOpEl, err := item.Element(".user-operation")
+	if err != nil {
+		logrus.Errorf("[MessageAction.clickDeleteButton] 未找到 user-operation: %v", err)
+		return err
+	}
+
+	userOpEl.Hover()
+	delay.Short()
+
+	// 尝试点击灰色图标 (.list-operate)
+	grayIcon, err := userOpEl.Element(".list-operate")
+	if err != nil {
+		logrus.Debugf("[MessageAction.clickDeleteButton] 未找到灰色图标，尝试 img")
+		grayIcon, err = userOpEl.Element("img")
+	}
+
+	if grayIcon != nil {
+		logrus.Infof("[MessageAction.clickDeleteButton] 点击图标")
+		if err := grayIcon.Click(proto.InputMouseButtonLeft, 1); err != nil {
+			logrus.Errorf("[MessageAction.clickDeleteButton] 点击失败: %v", err)
+		} else {
+			delay.Short()
+			if m.clickDeleteFromMenu() == nil {
 				return nil
 			}
 		}
 	}
 
-	// 策略2: 使用 go-rod 的 Hover + Click
-	logrus.Warnf("[MessageAction.clickDeleteButton] 策略1失败，使用策略2: go-rod Hover + Click")
-
-	// 先 hover 到 item
-	item.Hover()
-	time.Sleep(500 * time.Millisecond)
-	logrus.Debugf("[MessageAction.clickDeleteButton] hover 到 item 完成")
-
-	// 获取 user-operation 元素
-	var userOpEl *rod.Element
-	userOpSelectors := []string{
-		".user-operation",
-		"[class*='user-operation']",
+	// 策略3: 直接点击 user-operation
+	logrus.Warnf("[MessageAction.clickDeleteButton] 策略3: 直接点击 user-operation")
+	if err := userOpEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		return err
 	}
-
-	for _, selector := range userOpSelectors {
-		els, _ := item.Elements(selector)
-		if len(els) > 0 {
-			userOpEl = els[0]
-			logrus.Debugf("[MessageAction.clickDeleteButton] 找到 user-operation")
-			break
-		}
-	}
-
-	if userOpEl != nil {
-		// Hover 到 user-operation
-		userOpEl.Hover()
-		time.Sleep(800 * time.Millisecond)
-
-		// 尝试点击 list-operate-hover（高亮图标）
-		hoverSelectors := []string{
-			".list-operate-hover",
-			"img.list-operate-hover",
-			"img.icon-operate.list-operate-hover",
-		}
-
-		for _, sel := range hoverSelectors {
-			els, _ := userOpEl.Elements(sel)
-			if len(els) > 0 {
-				logrus.Infof("[MessageAction.clickDeleteButton] 点击高亮图标: %s", sel)
-				if err := els[0].Click(proto.InputMouseButtonLeft, 1); err == nil {
-					time.Sleep(800 * time.Millisecond)
-					if err := m.clickDeleteFromMenu(); err == nil {
-						return nil
-					}
-				}
-			}
-		}
-
-		// 如果高亮图标找不到，点击 user-operation 内的任何 img
-		els, _ := userOpEl.Elements("img")
-		if len(els) > 0 {
-			logrus.Infof("[MessageAction.clickDeleteButton] 点击 user-operation 内的 img")
-			if err := els[0].Click(proto.InputMouseButtonLeft, 1); err == nil {
-				time.Sleep(800 * time.Millisecond)
-				if err := m.clickDeleteFromMenu(); err == nil {
-					return nil
-				}
-			}
-		}
-	}
-
-	// 策略3: 直接点击 item 元素
-	logrus.Warnf("[MessageAction.clickDeleteButton] 策略2失败，使用策略3: 直接点击 item")
-	item.Click(proto.InputMouseButtonLeft, 1)
-	time.Sleep(500 * time.Millisecond)
+	delay.Short()
 
 	return m.clickDeleteFromMenu()
 }

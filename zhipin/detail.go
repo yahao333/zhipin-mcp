@@ -64,9 +64,6 @@ func (d *Detail) parseJobDetail(jobID string) (*Job, error) {
 		UpdatedAt: time.Now(),
 	}
 
-	// time.Sleep(5 * time.Second)
-	// debug.WritePageHTMLToFile(d.page, "detail.html")
-
 	// 获取职位标题
 	logrus.Debugf("[Detail.parseJobDetail] 查找职位标题 .job-title")
 	titleEl, err := d.page.Element(".job-title")

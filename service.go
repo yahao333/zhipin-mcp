@@ -780,6 +780,8 @@ func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageReq
 			response.Deleted++
 			response.Messages = append(response.Messages, fmt.Sprintf("%s: 成功", filter.PersonName))
 		}
+		// 随机延时 3-5 秒
+		delay.Medium()
 	}
 
 	response.Success = response.Failed == 0

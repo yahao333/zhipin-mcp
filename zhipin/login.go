@@ -176,8 +176,6 @@ func (l *Login) FetchQrcodeImage(ctx context.Context) (string, bool, error) {
 	// 等待二维码加载
 	time.Sleep(5 * time.Second)
 
-	// debug.WritePageHTMLToFile(pp, "data.html")
-
 	// 检查是否已经登录
 	exists, _, err := pp.Has(".user-name, .nick-name, .boss-avatar")
 	logrus.Debugf("user is logged in: %v %v", exists, err)

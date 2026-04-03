@@ -7,6 +7,18 @@ import (
 	"github.com/yahao333/zhipin-mcp/configs"
 )
 
+// Long 长延时，8-12秒
+func Long() {
+	delayMs := 8000 + rand.Intn(4000)
+	time.Sleep(time.Duration(delayMs) * time.Millisecond)
+}
+
+// Medium 中延时，3-5秒
+func Medium() {
+	delayMs := 3000 + rand.Intn(2000)
+	time.Sleep(time.Duration(delayMs) * time.Millisecond)
+}
+
 // Short 短延时，1-3秒
 func Short() {
 	delayMs := 500 + rand.Intn(2000)

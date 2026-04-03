@@ -9,7 +9,6 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/sirupsen/logrus"
-	"github.com/yahao333/zhipin-mcp/pkg/debug"
 	"github.com/yahao333/zhipin-mcp/pkg/delay"
 )
 
@@ -820,12 +819,6 @@ func (m *MessageAction) clickDeleteFromMenu() error {
 			logrus.Debugf("[MessageAction.clickDeleteFromMenu] 可见菜单元素 (尝试 %d): %s", retry+1, opResult.Value.String())
 		}
 
-		// 输出当前全部的 html 内容
-		_, err = m.page.HTML()
-		if err == nil {
-			debug.WritePageHTMLToFile(m.page, "delete_menu.html")
-		}
-
 		// 策略1: 直接在页面范围内查找可见的菜单
 		foundDelete := m.findDeleteInVisibleMenus()
 		if foundDelete {
@@ -1026,7 +1019,6 @@ func (m *MessageAction) findDeleteInVisibleMenus() bool {
 // BOSS直聘删除消息后会弹出确认对话框，需要点击确认
 func (m *MessageAction) handleDeleteConfirm() bool {
 	logrus.Debugf("[MessageAction.handleDeleteConfirm] 检查是否有删除确认对话框...")
-	debug.WritePageHTMLToFile(m.page, "toast_delete.html")
 
 	// 等待对话框出现
 	delay.Short()

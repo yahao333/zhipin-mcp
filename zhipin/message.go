@@ -10,6 +10,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/sirupsen/logrus"
+	"github.com/yahao333/zhipin-mcp/pkg/debug"
 	"github.com/yahao333/zhipin-mcp/pkg/delay"
 )
 
@@ -47,6 +48,104 @@ type MessageAction struct {
 // NewMessageAction 创建消息操作实例
 func NewMessageAction(page *rod.Page) *MessageAction {
 	return &MessageAction{page: page}
+}
+
+// FindMessageItem 查找匹配的消息项
+// 通过 personName, companyName, jobTitle 模糊匹配消息项，返回匹配的元素
+// 如果未找到返回 nil
+func (m *MessageAction) FindMessageItem(personName, companyName, jobTitle string) *rod.Element {
+	logrus.Debugf("[MessageAction.FindMessageItem] ========== 查找消息项 ==========")
+	logrus.Debugf("[MessageAction.FindMessageItem] 筛选条件: personName=%s, companyName=%s, jobTitle=%s", personName, companyName, jobTitle)
+
+	// 消息列表选择器
+	listSelectors := []string{".friend-item", "[role='listitem']", ".chat-item", ".dialog-item", ".message-item"}
+
+	// 人名选择器
+	nameSelectors := []string{".title-box .name-text", ".name-text", ".name"}
+
+	// 公司名选择器
+	companySelectors := []string{".title-box .name-box > span:nth-child(2)", ".company-name", "[class*='company']"}
+
+	// 职位名选择器
+	jobSelectors := []string{".title-box .name-box > span:nth-child(4)", ".job-title", "[class*='job']"}
+
+	// 遍历每个列表选择器
+	for _, listSel := range listSelectors {
+		items, err := m.page.Elements(listSel)
+		if err != nil || len(items) == 0 {
+			continue
+		}
+		logrus.Debugf("[MessageAction.FindMessageItem] 使用选择器 %s 找到 %d 个元素", listSel, len(items))
+
+		// 遍历每个消息项
+		for i, item := range items {
+			// 查找人名称
+			var nameEl *rod.Element
+			for _, sel := range nameSelectors {
+				if el, err := item.Element(sel); err == nil {
+					nameEl = el
+					break
+				}
+			}
+			if nameEl == nil {
+				continue
+			}
+
+			nameText, _ := nameEl.Text()
+			nameText = strings.TrimSpace(nameText)
+			logrus.Debugf("[MessageAction.FindMessageItem] 检查第 %d 个元素, 人名: %s", i+1, nameText)
+
+			// 模糊匹配人名
+			if personName != "" && !strings.Contains(nameText, personName) {
+				continue
+			}
+
+			// 匹配公司名称
+			companyMatch := true
+			if companyName != "" {
+				var cEl *rod.Element
+				for _, sel := range companySelectors {
+					if el, err := item.Element(sel); err == nil {
+						cEl = el
+						break
+					}
+				}
+				if cEl != nil {
+					cText, _ := cEl.Text()
+					cText = strings.TrimSpace(cText)
+					companyMatch = strings.Contains(cText, companyName)
+					logrus.Debugf("[MessageAction.FindMessageItem] 匹配公司: %s vs %s, 匹配=%v", cText, companyName, companyMatch)
+				}
+			}
+
+			// 匹配职位名称
+			jobMatch := true
+			if jobTitle != "" {
+				var jEl *rod.Element
+				for _, sel := range jobSelectors {
+					if el, err := item.Element(sel); err == nil {
+						jEl = el
+						break
+					}
+				}
+				if jEl != nil {
+					jText, _ := jEl.Text()
+					jText = strings.TrimSpace(jText)
+					jobMatch = strings.Contains(jText, jobTitle)
+					logrus.Debugf("[MessageAction.FindMessageItem] 匹配职位: %s vs %s, 匹配=%v", jText, jobTitle, jobMatch)
+				}
+			}
+
+			// 所有条件都匹配
+			if companyMatch && jobMatch {
+				logrus.Infof("[MessageAction.FindMessageItem] 找到匹配的消息项，人名: %s", nameText)
+				return item
+			}
+		}
+	}
+
+	logrus.Warnf("[MessageAction.FindMessageItem] 未找到匹配的消息项")
+	return nil
 }
 
 // ListMessages 获取消息列表
@@ -440,120 +539,31 @@ func (m *MessageAction) DeleteMessage(ctx context.Context, personName, companyNa
 	logrus.Debugf("[MessageAction.DeleteMessage] ========== 开始删除消息 ==========")
 	logrus.Debugf("[MessageAction.DeleteMessage] 筛选条件: personName=%s, companyName=%s, jobTitle=%s", personName, companyName, jobTitle)
 
-	// 步骤1: 获取消息列表
-	messages, err := m.ListMessages(ctx)
-	if err != nil {
-		logrus.Errorf("[MessageAction.DeleteMessage] 获取消息列表失败: %v", err)
+	// 步骤1: 刷新消息列表页面
+	url := "https://www.zhipin.com/web/geek/chat"
+	if err := m.page.Navigate(url); err != nil {
+		logrus.Errorf("[MessageAction.DeleteMessage] Navigate 失败: %v", err)
 		return err
 	}
-	logrus.Debugf("[MessageAction.DeleteMessage] 获取到 %d 条消息", len(messages.Messages))
+	m.page.WaitLoad()
+	delay.Short()
 
-	// 步骤2: 查找匹配的消息
-	var targetItem rod.Elements
-	var found bool
-
-	for _, selector := range []string{".friend-item", "[role='listitem']", ".chat-item", ".dialog-item", ".message-item"} {
-		items, err := m.page.Elements(selector)
-		if err != nil || len(items) == 0 {
-			continue
-		}
-
-		for i, item := range items {
-			// 获取当前项的文本内容进行匹配
-			itemText, _ := item.Text()
-			logrus.Debugf("[MessageAction.DeleteMessage] 检查第 %d 个元素, 文本长度: %d", i, len(itemText))
-
-			// 查找匹配的消息
-			var nameEl interface{ Text() (string, error) }
-			for _, sel := range []string{".title-box .name-text", ".name-text", ".name"} {
-				if el, err := item.Element(sel); err == nil {
-					nameEl = el
-					break
-				}
-			}
-			if nameEl == nil {
-				continue
-			}
-
-			nameText, _ := nameEl.Text()
-			nameText = strings.TrimSpace(nameText)
-			logrus.Debugf("[MessageAction.DeleteMessage] 匹配人名: %s vs %s", nameText, personName)
-
-			// 模糊匹配人名
-			if personName != "" && !strings.Contains(nameText, personName) {
-				continue
-			}
-
-			// 获取公司名称
-			companyMatch := true
-			if companyName != "" {
-				var cEl interface{ Text() (string, error) }
-				for _, sel := range []string{".title-box .name-box > span:nth-child(2)", ".company-name", "[class*='company']"} {
-					if el, err := item.Element(sel); err == nil {
-						cEl = el
-						break
-					}
-				}
-				if cEl != nil {
-					cText, _ := cEl.Text()
-					cText = strings.TrimSpace(cText)
-					companyMatch = strings.Contains(cText, companyName)
-					logrus.Debugf("[MessageAction.DeleteMessage] 匹配公司: %s vs %s, 匹配=%v", cText, companyName, companyMatch)
-				}
-			}
-
-			// 获取职位名称
-			jobMatch := true
-			if jobTitle != "" {
-				var jEl interface{ Text() (string, error) }
-				for _, sel := range []string{".title-box .name-box > span:nth-child(4)", ".job-title", "[class*='job']"} {
-					if el, err := item.Element(sel); err == nil {
-						jEl = el
-						break
-					}
-				}
-				if jEl != nil {
-					jText, _ := jEl.Text()
-					jText = strings.TrimSpace(jText)
-					jobMatch = strings.Contains(jText, jobTitle)
-					logrus.Debugf("[MessageAction.DeleteMessage] 匹配职位: %s vs %s, 匹配=%v", jText, jobTitle, jobMatch)
-				}
-			}
-
-			// 所有条件都匹配
-			if companyMatch && jobMatch {
-				targetItem = rod.Elements{item}
-				found = true
-				logrus.Infof("[MessageAction.DeleteMessage] 找到匹配的消息，人名: %s", nameText)
-				break
-			}
-		}
-
-		if found {
-			break
-		}
-	}
-
-	if !found {
+	// 步骤2: 查找匹配的消息项
+	item := m.FindMessageItem(personName, companyName, jobTitle)
+	if item == nil {
 		logrus.Warnf("[MessageAction.DeleteMessage] 未找到匹配的消息")
 		return errors.New("未找到匹配的消息")
 	}
 
 	// 步骤3: 鼠标悬停到目标元素，显示操作按钮
-	item := targetItem[0]
-	// 打印 targetItem 的 HTML 信息用于调试
 	if html, err := item.HTML(); err == nil {
-		// if len(html) > 1000 {
-		// 	html = html[:1000] + "..."
-		// }
 		logrus.Debugf("[MessageAction.DeleteMessage] targetItem HTML: %s", html)
 	} else {
 		logrus.Debugf("[MessageAction.DeleteMessage] 获取 targetItem HTML 失败: %v", err)
 	}
 	logrus.Debugf("[MessageAction.DeleteMessage] 鼠标悬停到消息项")
 
-	// 使用 MouseHover 方法替代 Hover
-	err = item.Hover()
+	err := item.Hover()
 	if err != nil {
 		logrus.Errorf("[MessageAction.DeleteMessage] Hover 失败: %v", err)
 		return err
@@ -1191,7 +1201,7 @@ type SendResult struct {
 // 通过 personName, companyName, jobTitle 定位消息项，点击打开对话框，输入内容并发送
 func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName, jobTitle, content string) (*SendResult, error) {
 	logrus.Debugf("[MessageAction.SendMessage] ========== 开始发送消息 ==========")
-	logrus.Debugf("[MessageAction.SendMessage] 目标: %s, 内容长度: %d", personName, len(content))
+	logrus.Debugf("[MessageAction.SendMessage] 筛选条件: personName=%s, companyName=%s, jobTitle=%s", personName, companyName, jobTitle)
 
 	// 步骤1: 确保在消息列表页面
 	url := "https://www.zhipin.com/web/geek/chat"
@@ -1202,64 +1212,8 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 	m.page.WaitLoad()
 	delay.Short()
 
-	// 步骤2: 查找匹配的消息项
-	logrus.Debugf("[MessageAction.SendMessage] 查找消息项...")
-
-	var targetItem *rod.Element
-	items, err := m.page.Elements(".friend-item")
-	if err == nil && len(items) == 0 {
-		items, err = m.page.Elements("[role='listitem']")
-	}
-
-	if err != nil || len(items) == 0 {
-		logrus.Errorf("[MessageAction.SendMessage] 未找到消息列表: %v", err)
-		return nil, fmt.Errorf("未找到消息列表")
-	}
-
-	// 遍历查找匹配的消息项
-	for i, item := range items {
-		_, _ = item.Text() // 获取元素文本用于调试
-
-		// 查找人名称
-		nameEl, _ := item.Element(".title-box .name-text")
-		if nameEl == nil {
-			nameEl, _ = item.Element(".name-text")
-		}
-		if nameEl == nil {
-			nameEl, _ = item.Element(".name")
-		}
-		if nameEl == nil {
-			nameEl, _ = item.Element("[class*='name']")
-		}
-
-		if nameEl != nil {
-			nameText, _ := nameEl.Text()
-			nameText = strings.TrimSpace(nameText)
-
-			logrus.Debugf("[MessageAction.SendMessage] 检查第 %d 个元素, 人名: %s vs %s", i+1, nameText, personName)
-
-			// 匹配人名
-			if nameText != "" && strings.Contains(nameText, personName) {
-				// 如果提供了公司名，进一步匹配
-				if companyName != "" {
-					companyEl, _ := item.Element(".title-box .name-box > span:nth-child(2)")
-					if companyEl != nil {
-						cText, _ := companyEl.Text()
-						if strings.Contains(cText, companyName) {
-							targetItem = item
-							logrus.Debugf("[MessageAction.SendMessage] 匹配人名+公司: %s %s", nameText, cText)
-							break
-						}
-					}
-				} else {
-					targetItem = item
-					logrus.Debugf("[MessageAction.SendMessage] 匹配人名: %s", nameText)
-					break
-				}
-			}
-		}
-	}
-
+	// 步骤2: 查找匹配的消息项（使用共用方法）
+	targetItem := m.FindMessageItem(personName, companyName, jobTitle)
 	if targetItem == nil {
 		logrus.Errorf("[MessageAction.SendMessage] 未找到匹配的消息项: %s", personName)
 		return nil, fmt.Errorf("未找到匹配的消息项: %s", personName)
@@ -1267,14 +1221,41 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 
 	// 步骤3: 点击消息项打开对话框
 	logrus.Debugf("[MessageAction.SendMessage] 点击消息项打开对话框...")
-	jsClick := `(function() { this.click(); })`
-	if _, err := targetItem.Eval(jsClick); err != nil {
-		logrus.Errorf("[MessageAction.SendMessage] 点击消息项失败: %v", err)
-		return nil, fmt.Errorf("点击消息项失败: %v", err)
+
+	// 先确保元素可见 - 使用 JS 滚动到视图
+	jsScroll := `(function() {
+		this.scrollIntoView({ behavior: 'instant', block: 'center' });
+		return 'scrolled';
+	})`
+	if _, err := targetItem.Eval(jsScroll); err != nil {
+		logrus.Warnf("[MessageAction.SendMessage] JS scroll 失败: %v", err)
+	}
+
+	delay.Short()
+
+	// 点击消息项 - 尝试 go-rod Click
+	if err := targetItem.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		logrus.Warnf("[MessageAction.SendMessage] Click 失败: %v", err)
+		// 备选: 使用 JS click
+		jsClick := `(function() {
+			this.click();
+			return 'clicked';
+		})`
+		if _, err := targetItem.Eval(jsClick); err != nil {
+			logrus.Errorf("[MessageAction.SendMessage] JS click 失败: %v", err)
+			return nil, fmt.Errorf("点击消息项失败: %v", err)
+		}
+		logrus.Infof("[MessageAction.SendMessage] 使用 JS click 成功")
+	} else {
+		logrus.Infof("[MessageAction.SendMessage] 使用 go-rod Click 成功")
 	}
 
 	// 等待对话框出现
-	delay.Medium()
+	delay.Long()
+	time.Sleep(3 * time.Second)
+
+	// 调试: 保存点击后的页面 HTML
+	debug.WritePageHTMLToFile(m.page, "send_message_after_click.html")
 
 	// 步骤4: 定位输入框
 	logrus.Debugf("[MessageAction.SendMessage] 定位输入框...")

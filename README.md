@@ -31,10 +31,7 @@ make run-port
 ### 首次登录
 
 ```bash
-# 获取登录二维码
-make api-login-qrcode
-
-# 或浏览器窗口扫码
+# 获取登录二维码，浏览器窗口扫码
 make api-login-qrcode-br
 ```
 

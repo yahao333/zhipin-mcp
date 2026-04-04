@@ -84,3 +84,7 @@ security:
 - **数据库**：SQLite
 - **日志**：logrus
 - **协议**：MCP（Model Context Protocol）
+
+## 交流群
+
+联系方式：[微信](https://my.feishu.cn/docx/MeyzdbJc7o1P4DxGqRAcDlYEnOk?from=from_copylink)

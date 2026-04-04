@@ -27,3 +27,46 @@ func TestMinFunction(t *testing.T) {
 		})
 	}
 }
+
+func TestSendResult(t *testing.T) {
+	tests := []struct {
+		name     string
+		result   SendResult
+		expected SendResult
+	}{
+		{
+			name: "成功发送",
+			result: SendResult{
+				Success:    true,
+				PersonName: "张三",
+				Message:    "消息发送成功",
+			},
+			expected: SendResult{
+				Success:    true,
+				PersonName: "张三",
+				Message:    "消息发送成功",
+			},
+		},
+		{
+			name: "发送失败",
+			result: SendResult{
+				Success:    false,
+				PersonName: "李四",
+				Message:    "未找到联系人",
+			},
+			expected: SendResult{
+				Success:    false,
+				PersonName: "李四",
+				Message:    "未找到联系人",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected.Success, tt.result.Success)
+			assert.Equal(t, tt.expected.PersonName, tt.result.PersonName)
+			assert.Equal(t, tt.expected.Message, tt.result.Message)
+		})
+	}
+}

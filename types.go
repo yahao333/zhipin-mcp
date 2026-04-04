@@ -233,3 +233,18 @@ type DeleteMessageResponse struct {
 	Failed   int      `json:"failed"`   // 失败数
 	Messages []string `json:"messages"` // 每条消息的删除结果
 }
+
+// SendMessageRequest 发送消息请求
+type SendMessageRequest struct {
+	PersonName  string `json:"person_name" binding:"required"` // HR姓名 - 必填
+	CompanyName string `json:"company_name"`                   // 公司名称 - 可选
+	JobTitle    string `json:"job_title"`                      // 职位名称 - 可选
+	Content     string `json:"content" binding:"required"`     // 消息内容 - 必填
+}
+
+// SendMessageResponse 发送消息响应
+type SendMessageResponse struct {
+	Success    bool   `json:"success"`
+	PersonName string `json:"person_name"` // 发送对象的姓名
+	Message    string `json:"message"`     // 结果信息
+}

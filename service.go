@@ -789,6 +789,66 @@ func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageReq
 	return response, nil
 }
 
+// SendMessage 发送消息
+func (s *ZhipinService) SendMessage(ctx context.Context, req *SendMessageRequest) (*SendMessageResponse, error) {
+	logrus.Debugf("[ZhipinService.SendMessage] ========== 开始发送消息 ==========")
+	logrus.Debugf("[ZhipinService.SendMessage] 目标: %s, 内容: %s", req.PersonName, req.Content)
+
+	// 参数验证
+	if req.PersonName == "" {
+		return &SendMessageResponse{
+			Success: false,
+			Message: "person_name 不能为空",
+		}, nil
+	}
+	if req.Content == "" {
+		return &SendMessageResponse{
+			Success: false,
+			Message: "消息内容不能为空",
+		}, nil
+	}
+
+	// 创建浏览器
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
+
+	// 检查登录状态
+	loginAction := zhipin.NewLogin(page)
+	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
+	if err != nil {
+		logrus.Errorf("[ZhipinService.SendMessage] 检查登录状态失败: %v", err)
+		return nil, err
+	}
+	if !isLoggedIn {
+		logrus.Warnf("[ZhipinService.SendMessage] 未登录")
+		return nil, errLoginRequired
+	}
+	logrus.Debugf("[ZhipinService.SendMessage] 登录状态检查通过")
+
+	// 发送消息
+	msgAction := zhipin.NewMessageAction(page)
+	result, err := msgAction.SendMessage(ctx, req.PersonName, req.CompanyName, req.JobTitle, req.Content)
+	if err != nil {
+		logrus.Errorf("[ZhipinService.SendMessage] 发送消息失败: %v", err)
+		return &SendMessageResponse{
+			Success:    false,
+			PersonName: req.PersonName,
+			Message:    "发送失败: " + err.Error(),
+		}, err
+	}
+
+	logrus.Debugf("[ZhipinService.SendMessage] ========== 发送消息完成 ==========")
+
+	return &SendMessageResponse{
+		Success:    result.Success,
+		PersonName: result.PersonName,
+		Message:    result.Message,
+	}, nil
+}
+
 // 辅助函数
 
 func newBrowser() *headless_browser.Browser {

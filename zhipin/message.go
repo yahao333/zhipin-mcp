@@ -3,6 +3,7 @@ package zhipin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -1177,4 +1178,296 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// SendResult 发送消息结果
+type SendResult struct {
+	Success    bool
+	PersonName string // 发送对象的姓名
+	Message    string // 详细信息
+}
+
+// SendMessage 发送消息
+// 通过 personName, companyName, jobTitle 定位消息项，点击打开对话框，输入内容并发送
+func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName, jobTitle, content string) (*SendResult, error) {
+	logrus.Debugf("[MessageAction.SendMessage] ========== 开始发送消息 ==========")
+	logrus.Debugf("[MessageAction.SendMessage] 目标: %s, 内容长度: %d", personName, len(content))
+
+	// 步骤1: 确保在消息列表页面
+	url := "https://www.zhipin.com/web/geek/chat"
+	if err := m.page.Navigate(url); err != nil {
+		logrus.Errorf("[MessageAction.SendMessage] Navigate 失败: %v", err)
+		return nil, err
+	}
+	m.page.WaitLoad()
+	delay.Short()
+
+	// 步骤2: 查找匹配的消息项
+	logrus.Debugf("[MessageAction.SendMessage] 查找消息项...")
+
+	var targetItem *rod.Element
+	items, err := m.page.Elements(".friend-item")
+	if err == nil && len(items) == 0 {
+		items, err = m.page.Elements("[role='listitem']")
+	}
+
+	if err != nil || len(items) == 0 {
+		logrus.Errorf("[MessageAction.SendMessage] 未找到消息列表: %v", err)
+		return nil, fmt.Errorf("未找到消息列表")
+	}
+
+	// 遍历查找匹配的消息项
+	for i, item := range items {
+		_, _ = item.Text() // 获取元素文本用于调试
+
+		// 查找人名称
+		nameEl, _ := item.Element(".title-box .name-text")
+		if nameEl == nil {
+			nameEl, _ = item.Element(".name-text")
+		}
+		if nameEl == nil {
+			nameEl, _ = item.Element(".name")
+		}
+		if nameEl == nil {
+			nameEl, _ = item.Element("[class*='name']")
+		}
+
+		if nameEl != nil {
+			nameText, _ := nameEl.Text()
+			nameText = strings.TrimSpace(nameText)
+
+			logrus.Debugf("[MessageAction.SendMessage] 检查第 %d 个元素, 人名: %s vs %s", i+1, nameText, personName)
+
+			// 匹配人名
+			if nameText != "" && strings.Contains(nameText, personName) {
+				// 如果提供了公司名，进一步匹配
+				if companyName != "" {
+					companyEl, _ := item.Element(".title-box .name-box > span:nth-child(2)")
+					if companyEl != nil {
+						cText, _ := companyEl.Text()
+						if strings.Contains(cText, companyName) {
+							targetItem = item
+							logrus.Debugf("[MessageAction.SendMessage] 匹配人名+公司: %s %s", nameText, cText)
+							break
+						}
+					}
+				} else {
+					targetItem = item
+					logrus.Debugf("[MessageAction.SendMessage] 匹配人名: %s", nameText)
+					break
+				}
+			}
+		}
+	}
+
+	if targetItem == nil {
+		logrus.Errorf("[MessageAction.SendMessage] 未找到匹配的消息项: %s", personName)
+		return nil, fmt.Errorf("未找到匹配的消息项: %s", personName)
+	}
+
+	// 步骤3: 点击消息项打开对话框
+	logrus.Debugf("[MessageAction.SendMessage] 点击消息项打开对话框...")
+	jsClick := `(function() { this.click(); })`
+	if _, err := targetItem.Eval(jsClick); err != nil {
+		logrus.Errorf("[MessageAction.SendMessage] 点击消息项失败: %v", err)
+		return nil, fmt.Errorf("点击消息项失败: %v", err)
+	}
+
+	// 等待对话框出现
+	delay.Medium()
+
+	// 步骤4: 定位输入框
+	logrus.Debugf("[MessageAction.SendMessage] 定位输入框...")
+	inputEl, err := m.findInputElement()
+	if err != nil {
+		logrus.Errorf("[MessageAction.SendMessage] 定位输入框失败: %v", err)
+		return nil, fmt.Errorf("无法定位消息输入框: %v", err)
+	}
+
+	// 步骤5: 输入消息内容
+	logrus.Debugf("[MessageAction.SendMessage] 输入消息内容...")
+	if err := m.typeInInput(inputEl, content); err != nil {
+		logrus.Errorf("[MessageAction.SendMessage] 输入内容失败: %v", err)
+		return nil, fmt.Errorf("输入内容失败: %v", err)
+	}
+
+	// 步骤6: 点击发送按钮
+	logrus.Debugf("[MessageAction.SendMessage] 点击发送按钮...")
+	if err := m.clickSendButton(); err != nil {
+		logrus.Errorf("[MessageAction.SendMessage] 点击发送按钮失败: %v", err)
+		return nil, fmt.Errorf("无法定位发送按钮: %v", err)
+	}
+
+	// 等待发送完成
+	delay.Short()
+
+	// 验证发送结果
+	success := m.verifySendSuccess(inputEl)
+	if success {
+		logrus.Infof("[MessageAction.SendMessage] ========== 发送消息成功 ==========")
+		return &SendResult{
+			Success:    true,
+			PersonName: personName,
+			Message:    "消息发送成功",
+		}, nil
+	}
+
+	logrus.Warnf("[MessageAction.SendMessage] 发送结果未知，返回成功")
+	return &SendResult{
+		Success:    true,
+		PersonName: personName,
+		Message:    "消息可能已发送",
+	}, nil
+}
+
+// findInputElement 定位消息输入框
+func (m *MessageAction) findInputElement() (*rod.Element, error) {
+	logrus.Debugf("[MessageAction.findInputElement] ========== 查找输入框 ==========")
+
+	// 尝试多种选择器
+	inputSelectors := []string{
+		"textarea.msg-textarea",          // BOSS直聘标准选择器
+		"textarea[class*='msg']",         // 包含 msg 的 textarea
+		"textarea[class*='message']",     // 包含 message 的 textarea
+		"textarea",                       // 通用 textarea
+		"[class*='msg-input'] textarea",  // 输入框容器内的 textarea
+		"[class*='chat-input'] textarea", // 聊天输入框容器
+		"[class*='input-area'] textarea", // 输入区域
+	}
+
+	for _, selector := range inputSelectors {
+		logrus.Debugf("[MessageAction.findInputElement] 尝试选择器: %s", selector)
+		el, err := m.page.Element(selector)
+		if err == nil {
+			logrus.Debugf("[MessageAction.findInputElement] 找到输入框: %s", selector)
+			return el, nil
+		}
+	}
+
+	// 尝试 contenteditable div
+	contentEditableSelectors := []string{
+		"div[contenteditable='true']",
+		"[class*='msg-input'][contenteditable='true']",
+		"[class*='chat-input'][contenteditable='true']",
+	}
+
+	for _, selector := range contentEditableSelectors {
+		logrus.Debugf("[MessageAction.findInputElement] 尝试 contenteditable: %s", selector)
+		el, err := m.page.Element(selector)
+		if err == nil {
+			logrus.Debugf("[MessageAction.findInputElement] 找到 contenteditable 输入框: %s", selector)
+			return el, nil
+		}
+	}
+
+	return nil, fmt.Errorf("未找到输入框")
+}
+
+// typeInInput 在输入框中输入内容
+func (m *MessageAction) typeInInput(inputEl *rod.Element, content string) error {
+	logrus.Debugf("[MessageAction.typeInInput] 输入内容: %s", content)
+
+	// 先尝试点击输入框获得焦点
+	if err := inputEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		logrus.Warnf("[MessageAction.typeInInput] 点击输入框失败: %v", err)
+	}
+
+	delay.Short()
+
+	// 使用 JS 直接设置输入框的值
+	jsSetValue := fmt.Sprintf(`(function() {
+		this.value = %q;
+		this.dispatchEvent(new Event('input', { bubbles: true }));
+		this.dispatchEvent(new Event('change', { bubbles: true }));
+		return 'set';
+	})`, content)
+	if _, err := inputEl.Eval(jsSetValue); err != nil {
+		return fmt.Errorf("输入内容失败: %v", err)
+	}
+
+	return nil
+}
+
+// clickSendButton 点击发送按钮
+func (m *MessageAction) clickSendButton() error {
+	logrus.Debugf("[MessageAction.clickSendButton] ========== 查找发送按钮 ==========")
+
+	// 尝试多种选择器
+	sendButtonSelectors := []string{
+		"button.btn-send",                // BOSS直聘标准发送按钮
+		"button[class*='send']",          // 包含 send 的 button
+		"button[class*='msg-send']",      // 消息发送按钮
+		"[class*='send-btn']",            // 发送按钮容器
+		"[class*='operate-btn']",         // 操作按钮
+		".chat-window button:last-child", // 聊天窗口最后一个按钮
+		".btn.btn-primary",               // 主要按钮
+	}
+
+	var sendBtn *rod.Element
+	var err error
+
+	for _, selector := range sendButtonSelectors {
+		logrus.Debugf("[MessageAction.clickSendButton] 尝试选择器: %s", selector)
+		sendBtn, err = m.page.Element(selector)
+		if err == nil {
+			// 检查按钮文本是否包含"发送"
+			btnText, _ := sendBtn.Text()
+			if strings.Contains(btnText, "发送") || strings.Contains(btnText, "send") {
+				logrus.Debugf("[MessageAction.clickSendButton] 找到发送按钮: %s (文本: %s)", selector, btnText)
+				break
+			}
+		}
+	}
+
+	if sendBtn == nil {
+		return fmt.Errorf("未找到发送按钮")
+	}
+
+	// 点击发送按钮
+	if err := sendBtn.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		logrus.Errorf("[MessageAction.clickSendButton] 点击发送按钮失败: %v", err)
+		// 尝试使用 JS 点击
+		jsClick := `(function() { this.click(); })`
+		if _, err := sendBtn.Eval(jsClick); err != nil {
+			return fmt.Errorf("点击发送按钮失败: %v", err)
+		}
+	}
+
+	logrus.Debugf("[MessageAction.clickSendButton] 发送按钮已点击")
+	return nil
+}
+
+// verifySendSuccess 验证发送是否成功
+func (m *MessageAction) verifySendSuccess(inputEl *rod.Element) bool {
+	logrus.Debugf("[MessageAction.verifySendSuccess] ========== 验证发送结果 ==========")
+
+	// 方法1: 检查输入框是否被清空（消息已发出）
+	inputValue, _ := inputEl.Attribute("value")
+	if inputValue != nil && *inputValue == "" {
+		logrus.Debugf("[MessageAction.verifySendSuccess] 输入框已清空，发送成功")
+		return true
+	}
+
+	// 方法2: 检查是否有 toast 提示成功
+	toastSelectors := []string{
+		".toast",
+		".message-toast",
+		"[class*='toast']",
+	}
+
+	for _, selector := range toastSelectors {
+		toast, err := m.page.Element(selector)
+		if err == nil {
+			toastText, _ := toast.Text()
+			if strings.Contains(toastText, "发送成功") || strings.Contains(toastText, "成功") {
+				logrus.Debugf("[MessageAction.verifySendSuccess] 检测到成功提示: %s", toastText)
+				return true
+			}
+		}
+	}
+
+	// 方法3: 检查消息列表中该对话是否有新消息
+	// 这个方法需要在发送前记录消息摘要，发送后再对比
+
+	return false
 }

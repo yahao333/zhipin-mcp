@@ -585,6 +585,57 @@ func (s *AppServer) handleDeleteMessage(ctx context.Context, args map[string]int
 	}
 }
 
+// handleSendMessage 处理发送消息
+func (s *AppServer) handleSendMessage(ctx context.Context, args map[string]interface{}) *MCPToolResult {
+	logrus.Info("MCP: 发送消息")
+
+	// 解析参数
+	personName, _ := args["person_name"].(string)
+	companyName, _ := args["company_name"].(string)
+	jobTitle, _ := args["job_title"].(string)
+	content, _ := args["content"].(string)
+
+	if personName == "" {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "请提供 person_name（HR姓名）"}},
+			IsError: true,
+		}
+	}
+
+	if content == "" {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "请提供消息内容（content）"}},
+			IsError: true,
+		}
+	}
+
+	req := &SendMessageRequest{
+		PersonName:  personName,
+		CompanyName: companyName,
+		JobTitle:    jobTitle,
+		Content:     content,
+	}
+
+	result, err := s.zhipinService.SendMessage(ctx, req)
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "发送消息失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	var text string
+	if result.Success {
+		text = fmt.Sprintf("✅ 消息发送成功！\n\n发送给: %s\n内容: %s", result.PersonName, content)
+	} else {
+		text = fmt.Sprintf("❌ 消息发送失败\n\n发送对象: %s\n原因: %s", result.PersonName, result.Message)
+	}
+
+	return &MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: text}},
+	}
+}
+
 // 辅助函数：解析JSON
 func parseJSON(v interface{}) (map[string]interface{}, error) {
 	data, err := json.Marshal(v)

@@ -267,3 +267,21 @@ func (s *AppServer) handleAPIDeleteMessage(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, result)
 }
+
+// handleAPISendMessage 发送消息
+func (s *AppServer) handleAPISendMessage(c *gin.Context) {
+	logrus.Info("API: 发送消息")
+
+	var req SendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := s.zhipinService.SendMessage(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}

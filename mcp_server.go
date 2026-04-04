@@ -65,6 +65,8 @@ func (s *MCPServer) HandleToolCall(ctx context.Context, call MCPToolCall) *MCPTo
 		return appServer.handleListMessages(ctx)
 	case "delete_message":
 		return appServer.handleDeleteMessage(ctx, call.Arguments)
+	case "send_message":
+		return appServer.handleSendMessage(ctx, call.Arguments)
 	default:
 		return &MCPToolResult{
 			Content: []MCPContent{{
@@ -232,6 +234,20 @@ func (s *MCPServer) GetTools() []Tool {
 					},
 				},
 				"required": []string{"messages"},
+			},
+		},
+		{
+			Name:        "send_message",
+			Description: "向消息列表中的指定联系人发送消息，通过人名称、公司名称、职位名称进行匹配筛选",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"person_name":  map[string]interface{}{"type": "string", "description": "人名称（HR姓名）- 必填"},
+					"company_name": map[string]interface{}{"type": "string", "description": "公司名称 - 可选"},
+					"job_title":    map[string]interface{}{"type": "string", "description": "职位名称 - 可选"},
+					"content":      map[string]interface{}{"type": "string", "description": "消息内容 - 必填"},
+				},
+				"required": []string{"person_name", "content"},
 			},
 		},
 	}

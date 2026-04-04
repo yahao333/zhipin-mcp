@@ -1210,7 +1210,7 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 		return nil, err
 	}
 	m.page.WaitLoad()
-	delay.Short()
+	delay.Medium()
 
 	// 步骤2: 查找匹配的消息项（使用共用方法）
 	targetItem := m.FindMessageItem(personName, companyName, jobTitle)
@@ -1254,9 +1254,6 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 	delay.Long()
 	time.Sleep(3 * time.Second)
 
-	// 调试: 保存点击后的页面 HTML
-	debug.WritePageHTMLToFile(m.page, "send_message_after_click.html")
-
 	// 步骤4: 定位输入框
 	logrus.Debugf("[MessageAction.SendMessage] 定位输入框...")
 	inputEl, err := m.findInputElement()
@@ -1272,7 +1269,13 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 		return nil, fmt.Errorf("输入内容失败: %v", err)
 	}
 
-	// 步骤6: 点击发送按钮
+	// 步骤6: 等待发送按钮变为可用
+	logrus.Debugf("[MessageAction.SendMessage] 等待发送按钮变为可用...")
+	if err := m.waitForSendButtonEnabled(); err != nil {
+		logrus.Warnf("[MessageAction.SendMessage] 等待发送按钮可用超时: %v", err)
+	}
+
+	// 步骤7: 点击发送按钮
 	logrus.Debugf("[MessageAction.SendMessage] 点击发送按钮...")
 	if err := m.clickSendButton(); err != nil {
 		logrus.Errorf("[MessageAction.SendMessage] 点击发送按钮失败: %v", err)
@@ -1281,6 +1284,7 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 
 	// 等待发送完成
 	delay.Short()
+	debug.WritePageHTMLToFile(m.page, "verify_send_success.html")
 
 	// 验证发送结果
 	success := m.verifySendSuccess(inputEl)
@@ -1305,7 +1309,25 @@ func (m *MessageAction) SendMessage(ctx context.Context, personName, companyName
 func (m *MessageAction) findInputElement() (*rod.Element, error) {
 	logrus.Debugf("[MessageAction.findInputElement] ========== 查找输入框 ==========")
 
-	// 尝试多种选择器
+	// 先尝试 contenteditable div（BOSS直聘聊天输入框为 div#chat-input）
+	contentEditableSelectors := []string{
+		"div#chat-input",                         // id 选择器优先
+		"div#chat-input[contenteditable='true']", // id + contenteditable
+		"div[contenteditable='true']",
+		"[class*='msg-input'][contenteditable='true']",
+		"[class*='chat-input'][contenteditable='true']",
+	}
+
+	for _, selector := range contentEditableSelectors {
+		logrus.Debugf("[MessageAction.findInputElement] 尝试 contenteditable: %s", selector)
+		el, err := m.page.Timeout(2 * time.Second).Element(selector)
+		if err == nil {
+			logrus.Debugf("[MessageAction.findInputElement] 找到 contenteditable 输入框: %s", selector)
+			return el, nil
+		}
+	}
+
+	// 兜底: 尝试 textarea
 	inputSelectors := []string{
 		"textarea.msg-textarea",          // BOSS直聘标准选择器
 		"textarea[class*='msg']",         // 包含 msg 的 textarea
@@ -1318,25 +1340,9 @@ func (m *MessageAction) findInputElement() (*rod.Element, error) {
 
 	for _, selector := range inputSelectors {
 		logrus.Debugf("[MessageAction.findInputElement] 尝试选择器: %s", selector)
-		el, err := m.page.Element(selector)
+		el, err := m.page.Timeout(2 * time.Second).Element(selector)
 		if err == nil {
 			logrus.Debugf("[MessageAction.findInputElement] 找到输入框: %s", selector)
-			return el, nil
-		}
-	}
-
-	// 尝试 contenteditable div
-	contentEditableSelectors := []string{
-		"div[contenteditable='true']",
-		"[class*='msg-input'][contenteditable='true']",
-		"[class*='chat-input'][contenteditable='true']",
-	}
-
-	for _, selector := range contentEditableSelectors {
-		logrus.Debugf("[MessageAction.findInputElement] 尝试 contenteditable: %s", selector)
-		el, err := m.page.Element(selector)
-		if err == nil {
-			logrus.Debugf("[MessageAction.findInputElement] 找到 contenteditable 输入框: %s", selector)
 			return el, nil
 		}
 	}
@@ -1348,21 +1354,45 @@ func (m *MessageAction) findInputElement() (*rod.Element, error) {
 func (m *MessageAction) typeInInput(inputEl *rod.Element, content string) error {
 	logrus.Debugf("[MessageAction.typeInInput] 输入内容: %s", content)
 
+	// 重新查找输入框（避免传入的 element 上下文已过期）
+	inputSelectors := []string{
+		"div#chat-input",
+		"div#chat-input[contenteditable='true']",
+		"div[contenteditable='true']",
+		"[class*='chat-input'][contenteditable='true']",
+	}
+	var el *rod.Element
+	var err error
+	for _, selector := range inputSelectors {
+		el, err = m.page.Timeout(5 * time.Second).Element(selector)
+		if err == nil {
+			break
+		}
+	}
+	if el == nil {
+		return fmt.Errorf("重新查找输入框失败")
+	}
+
 	// 先尝试点击输入框获得焦点
-	if err := inputEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+	if err := el.Timeout(5 * time.Second).Click(proto.InputMouseButtonLeft, 1); err != nil {
 		logrus.Warnf("[MessageAction.typeInInput] 点击输入框失败: %v", err)
 	}
 
 	delay.Short()
 
 	// 使用 JS 直接设置输入框的值
+	// contenteditable div 使用 innerText，input/textarea 使用 value
 	jsSetValue := fmt.Sprintf(`(function() {
-		this.value = %q;
+		if (this.contentEditable === 'true' || this.contentEditable === 'plaintext-only') {
+			this.innerText = %q;
+		} else {
+			this.value = %q;
+		}
 		this.dispatchEvent(new Event('input', { bubbles: true }));
 		this.dispatchEvent(new Event('change', { bubbles: true }));
 		return 'set';
-	})`, content)
-	if _, err := inputEl.Eval(jsSetValue); err != nil {
+	})`, content, content)
+	if _, err := el.Timeout(5 * time.Second).Eval(jsSetValue); err != nil {
 		return fmt.Errorf("输入内容失败: %v", err)
 	}
 
@@ -1375,13 +1405,15 @@ func (m *MessageAction) clickSendButton() error {
 
 	// 尝试多种选择器
 	sendButtonSelectors := []string{
-		"button.btn-send",                // BOSS直聘标准发送按钮
-		"button[class*='send']",          // 包含 send 的 button
-		"button[class*='msg-send']",      // 消息发送按钮
-		"[class*='send-btn']",            // 发送按钮容器
-		"[class*='operate-btn']",         // 操作按钮
-		".chat-window button:last-child", // 聊天窗口最后一个按钮
-		".btn.btn-primary",               // 主要按钮
+		"div.chat-op button[type='send']", // BOSS直聘聊天发送按钮
+		"button.btn-send",                 // BOSS直聘标准发送按钮
+		"button[class*='send']",           // 包含 send 的 button
+		"button[class*='msg-send']",       // 消息发送按钮
+		"button[type='send']",             // type=send 的 button
+		"[class*='send-btn']",             // 发送按钮容器
+		"[class*='operate-btn']",          // 操作按钮
+		".chat-window button:last-child",  // 聊天窗口最后一个按钮
+		".btn.btn-primary",                // 主要按钮
 	}
 
 	var sendBtn *rod.Element
@@ -1389,7 +1421,7 @@ func (m *MessageAction) clickSendButton() error {
 
 	for _, selector := range sendButtonSelectors {
 		logrus.Debugf("[MessageAction.clickSendButton] 尝试选择器: %s", selector)
-		sendBtn, err = m.page.Element(selector)
+		sendBtn, err = m.page.Timeout(2 * time.Second).Element(selector)
 		if err == nil {
 			// 检查按钮文本是否包含"发送"
 			btnText, _ := sendBtn.Text()
@@ -1418,14 +1450,86 @@ func (m *MessageAction) clickSendButton() error {
 	return nil
 }
 
+// waitForSendButtonEnabled 等待发送按钮变为可用（输入内容后按钮才会启用）
+func (m *MessageAction) waitForSendButtonEnabled() error {
+	logrus.Debugf("[MessageAction.waitForSendButtonEnabled] ========== 等待发送按钮可用 ==========")
+
+	selector := "div.chat-op button[type='send']"
+	maxRetries := 10
+	retryInterval := 500 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		btn, err := m.page.Timeout(1 * time.Second).Element(selector)
+		if err != nil {
+			logrus.Debugf("[MessageAction.waitForSendButtonEnabled] 第 %d 次: 未找到按钮", i+1)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		// 检查按钮是否可用（无 disabled 类且 pointer-events 不为 none）
+		jsCheck := `(function() {
+			var el = this;
+			// 检查是否有 disabled 类名
+			if (el.className && el.className.includes && el.className.includes('disabled')) {
+				return false;
+			}
+			// 检查 computed style 的 pointer-events
+			var style = window.getComputedStyle(el);
+			if (style.pointerEvents === 'none') {
+				return false;
+			}
+			return true;
+		})`
+		result, err := btn.Eval(jsCheck)
+		if err == nil && result != nil && result.Value.String() == "true" {
+			logrus.Debugf("[MessageAction.waitForSendButtonEnabled] 按钮已可用 (第 %d 次)", i+1)
+			return nil
+		}
+
+		logrus.Debugf("[MessageAction.waitForSendButtonEnabled] 第 %d 次: 按钮仍不可用", i+1)
+		time.Sleep(retryInterval)
+	}
+
+	return fmt.Errorf("等待发送按钮可用超时")
+}
+
 // verifySendSuccess 验证发送是否成功
 func (m *MessageAction) verifySendSuccess(inputEl *rod.Element) bool {
 	logrus.Debugf("[MessageAction.verifySendSuccess] ========== 验证发送结果 ==========")
 
+	// 重新定位输入框（避免使用已失效的 Element 引用）
+	inputSelectors := []string{
+		"div#chat-input",
+		"div#chat-input[contenteditable='true']",
+		"div[contenteditable='true']",
+		"[class*='chat-input'][contenteditable='true']",
+	}
+
+	var currentEl *rod.Element
+	var err error
+	for _, selector := range inputSelectors {
+		currentEl, err = m.page.Timeout(2 * time.Second).Element(selector)
+		if err == nil {
+			break
+		}
+	}
+	if currentEl == nil {
+		logrus.Warnf("[MessageAction.verifySendSuccess] 无法重新定位输入框")
+		// 继续用原 element 尝试，不直接返回 false
+		currentEl = inputEl
+	}
+
 	// 方法1: 检查输入框是否被清空（消息已发出）
-	inputValue, _ := inputEl.Attribute("value")
+	// contenteditable div 使用 innerText，input/textarea 使用 value
+	inputValue, _ := currentEl.Timeout(2 * time.Second).Attribute("value")
 	if inputValue != nil && *inputValue == "" {
-		logrus.Debugf("[MessageAction.verifySendSuccess] 输入框已清空，发送成功")
+		logrus.Debugf("[MessageAction.verifySendSuccess] 输入框(value)已清空，发送成功")
+		return true
+	}
+	// 对于 contenteditable div，检查 innerText 是否为空
+	innerText, _ := currentEl.Timeout(2 * time.Second).Eval(`(function() { return this.innerText; })`)
+	if innerText != nil && innerText.Value.String() == "" {
+		logrus.Debugf("[MessageAction.verifySendSuccess] 输入框(innerText)已清空，发送成功")
 		return true
 	}
 
@@ -1437,18 +1541,15 @@ func (m *MessageAction) verifySendSuccess(inputEl *rod.Element) bool {
 	}
 
 	for _, selector := range toastSelectors {
-		toast, err := m.page.Element(selector)
+		toast, err := m.page.Timeout(2 * time.Second).Element(selector)
 		if err == nil {
-			toastText, _ := toast.Text()
+			toastText, _ := toast.Timeout(2 * time.Second).Text()
 			if strings.Contains(toastText, "发送成功") || strings.Contains(toastText, "成功") {
 				logrus.Debugf("[MessageAction.verifySendSuccess] 检测到成功提示: %s", toastText)
 				return true
 			}
 		}
 	}
-
-	// 方法3: 检查消息列表中该对话是否有新消息
-	// 这个方法需要在发送前记录消息摘要，发送后再对比
 
 	return false
 }

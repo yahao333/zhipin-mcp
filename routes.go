@@ -53,6 +53,7 @@ func setupRoutes(app *AppServer) *gin.Engine {
 		// 消息
 		api.GET("/messages", app.handleAPIListMessages)
 		api.POST("/messages/delete", app.handleAPIDeleteMessage)
+		api.POST("/messages/send", app.handleAPISendMessage)
 	}
 
 	return router

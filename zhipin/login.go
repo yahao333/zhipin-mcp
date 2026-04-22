@@ -16,9 +16,29 @@ import (
 )
 
 func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page, error) {
-	pp := page.Context(ctx).Timeout(45 * time.Second)
+	// navigateAndWait 用于“打开指定 URL 并等待页面稳定可用”：
+	// 1) 绑定 ctx：便于上层统一控制取消/超时
+	// 2) 设置页面级超时：防止卡在网络/页面事件上导致流程挂死
+	// 3) 监听 NetworkRequestWillBeSent：记录重定向链路，方便排查跳转/风控/验证码页面
+	// 4) 等待 DOMContentLoaded：确保页面主结构加载完成
+	// 5) 等待 RequestIdle：确保页面请求进入短暂空闲，减少后续元素查找不稳定
+	// 6) 拉取 PageInfo：拿到最终 URL、Title 等信息并做基础“疑似反爬/风控”判断
+	const pageTimeout = 45 * time.Second
+	startAt := time.Now()
 
-	logrus.WithField("url", url).Debug("navigate start")
+	pp := page.Context(ctx).Timeout(pageTimeout)
+
+	baseLog := logrus.WithFields(logrus.Fields{
+		"url":        url,
+		"timeout_ms": pageTimeout.Milliseconds(),
+		"ctx_deadline": func() string {
+			if d, ok := ctx.Deadline(); ok {
+				return d.Format(time.RFC3339Nano)
+			}
+			return ""
+		}(),
+	})
+	baseLog.Debug("navigate start")
 
 	type redirectHop struct {
 		From   string
@@ -32,6 +52,9 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 	)
 
 	monitorPage, cancelMonitor := pp.WithCancel()
+	defer cancelMonitor()
+
+	baseLog.Debug("redirect monitor start")
 	go monitorPage.EachEvent(func(e *proto.NetworkRequestWillBeSent) {
 		if e == nil || e.RedirectResponse == nil {
 			return
@@ -42,22 +65,36 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 			To:     e.Request.URL,
 			Status: e.RedirectResponse.Status,
 		})
+		redirectCount := len(redirects)
 		mu.Unlock()
+		baseLog.WithFields(logrus.Fields{
+			"from":   e.RedirectResponse.URL,
+			"to":     e.Request.URL,
+			"status": e.RedirectResponse.Status,
+			"count":  redirectCount,
+		}).Debug("redirect hop captured")
 	})()
 
 	waitNav := pp.WaitNavigation(proto.PageLifecycleEventNameDOMContentLoaded)
+	baseLog.Debug("navigate begin")
 	if err := pp.Navigate(url); err != nil {
-		cancelMonitor()
+		baseLog.WithError(err).WithField("elapsed_ms", time.Since(startAt).Milliseconds()).Debug("navigate failed")
 		return nil, errors.Wrapf(err, "navigate to %s failed", url)
 	}
+	baseLog.Debug("wait DOMContentLoaded begin")
 	waitNav()
 
-	pp.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)()
+	baseLog.WithField("elapsed_ms", time.Since(startAt).Milliseconds()).Debug("DOMContentLoaded done")
 
-	cancelMonitor()
+	baseLog.WithField("idle_quiet_ms", int64(500*time.Millisecond/time.Millisecond)).Debug("wait request idle begin")
+	waitIdle := pp.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)
+	waitIdle()
+
+	baseLog.WithField("elapsed_ms", time.Since(startAt).Milliseconds()).Debug("*page loaded*")
 
 	info, err := pp.Info()
 	if err != nil {
+		baseLog.WithError(err).WithField("elapsed_ms", time.Since(startAt).Milliseconds()).Debug("get page info failed")
 		return nil, errors.Wrap(err, "get page info failed")
 	}
 
@@ -69,6 +106,12 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 
 	finalURL := info.URL
 	isRedirected := !strings.HasPrefix(finalURL, url)
+
+	baseLog.WithFields(logrus.Fields{
+		"final_url":  finalURL,
+		"title":      info.Title,
+		"redirected": isRedirected,
+	}).Debug("page info collected")
 
 	isAntiBot := false
 	reason := ""
@@ -104,6 +147,7 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 		"title":          info.Title,
 		"redirected":     isRedirected,
 		"redirect_count": redirectCount,
+		"elapsed_ms":     time.Since(startAt).Milliseconds(),
 		"anti_bot":       isAntiBot,
 		"anti_bot_hint":  reason,
 		"redirects":      redirectCopy,
@@ -133,7 +177,7 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 	logrus.Debugf("page loaded")
 
 	// 等待页面稳定
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Second)
 
 	// 检查是否有登录按钮（未登录）
 	exists, _, err := pp.Has(".btns .header-login-btn")

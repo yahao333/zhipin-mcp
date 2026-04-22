@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -23,7 +24,7 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 	// 4) 等待 DOMContentLoaded：确保页面主结构加载完成
 	// 5) 等待 RequestIdle：确保页面请求进入短暂空闲，减少后续元素查找不稳定
 	// 6) 拉取 PageInfo：拿到最终 URL、Title 等信息并做基础“疑似反爬/风控”判断
-	const pageTimeout = 45 * time.Second
+	pageTimeout := 30*time.Second + time.Duration(rand.Intn(10))*time.Second
 	startAt := time.Now()
 
 	pp := page.Context(ctx).Timeout(pageTimeout)

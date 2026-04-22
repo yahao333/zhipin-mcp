@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Cookier interface {
@@ -45,6 +46,7 @@ func (c *localCookie) SaveCookies(data []byte) error {
 		return errors.Wrap(err, "创建目录失败")
 	}
 
+	logrus.Infof("cookie path: %s", c.path)
 	return os.WriteFile(c.path, data, 0600)
 }
 

@@ -513,3 +513,101 @@ func TestSaveQrcodeImageFileCreation(t *testing.T) {
 		os.Remove(qrcodePath)
 	}
 }
+
+// TestServiceGetConfig 测试获取配置
+func TestServiceGetConfig(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过需要浏览器的测试")
+	}
+	service := NewZhipinService()
+	ctx := context.Background()
+
+	resp, err := service.GetConfig(ctx)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, configs.Username, resp.Username)
+	assert.Equal(t, configs.MaxDaily, resp.MaxDaily)
+}
+
+// TestServiceDeleteCookies 测试删除 cookies
+func TestServiceDeleteCookies(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过需要浏览器的测试")
+	}
+	service := NewZhipinService()
+	ctx := context.Background()
+
+	// 先删除
+	err := service.DeleteCookies(ctx)
+	require.NoError(t, err)
+
+	// 再次删除应该也不报错（幂等）
+	err = service.DeleteCookies(ctx)
+	require.NoError(t, err)
+}
+
+// TestServiceDeliveredListZeroLimit 测试 limit 为 0 的情况
+func TestServiceDeliveredListZeroLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过需要浏览器的测试")
+	}
+	initTestDB(t)
+
+	service := NewZhipinService()
+	ctx := context.Background()
+
+	// limit 为 0 应该使用默认值 20
+	resp, err := service.DeliveredList(ctx, 0, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, resp.Total)
+}
+
+// TestServiceDeliveredListNegativeOffset 测试负数 offset 的情况
+func TestServiceDeliveredListNegativeOffset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过需要浏览器的测试")
+	}
+	initTestDB(t)
+
+	service := NewZhipinService()
+	ctx := context.Background()
+
+	// offset 为负数应该使用默认值 0
+	resp, err := service.DeliveredList(ctx, 10, -1)
+	require.NoError(t, err)
+	assert.Equal(t, 0, resp.Total)
+}
+
+// TestServiceStartCron 测试启动定时任务
+func TestServiceStartCron(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过需要浏览器的测试")
+	}
+	initTestDB(t)
+
+	service := NewZhipinService()
+	ctx := context.Background()
+
+	task := &CronTask{
+		TaskName: "测试定时任务",
+		CronExpr: "0 9 * * *",
+		Keyword:  "工程师",
+		City:     "北京",
+		IsActive: true,
+	}
+
+	err := service.StartCron(ctx, task)
+	require.NoError(t, err)
+
+	// 验证任务保存成功
+	tasks, err := GetCronTasks()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(tasks), 1)
+
+	// 清理：停止任务
+	for _, t := range tasks {
+		if t.TaskName == "测试定时任务" {
+			_ = service.StopCron(ctx, t.ID)
+		}
+	}
+}

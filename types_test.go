@@ -321,3 +321,82 @@ func TestError(t *testing.T) {
 	assert.Equal(t, "测试错误消息", err.Error())
 	assert.Equal(t, "测试错误消息", err.Msg)
 }
+
+// TestConvertMessage 测试消息类型转换
+func TestConvertMessage(t *testing.T) {
+	now := time.Now()
+	zhipinMsg := zhipin.Message{
+		PersonName:    "张HR",
+		CompanyName:   "字节跳动",
+		JobTitle:      "后端工程师",
+		Avatar:        "https://example.com/avatar.jpg",
+		MessageDigest: "您好，请问您对xxx职位感兴趣吗",
+		Time:          now,
+		UnreadCount:   3,
+		Status:        "unread",
+	}
+
+	result := convertMessage(&zhipinMsg)
+
+	assert.Equal(t, "张HR", result.PersonName)
+	assert.Equal(t, "字节跳动", result.CompanyName)
+	assert.Equal(t, "后端工程师", result.JobTitle)
+	assert.Equal(t, "https://example.com/avatar.jpg", result.Avatar)
+	assert.Equal(t, "您好，请问您对xxx职位感兴趣吗", result.MessageDigest)
+	assert.Equal(t, 3, result.UnreadCount)
+	assert.Equal(t, MessageStatus("unread"), result.Status)
+}
+
+// TestConvertMessages 测试批量消息类型转换
+func TestConvertMessages(t *testing.T) {
+	now := time.Now()
+	zhipinMsgs := []zhipin.Message{
+		{
+			PersonName:    "张HR",
+			CompanyName:   "字节跳动",
+			JobTitle:      "后端工程师",
+			MessageDigest: "消息1",
+			Time:          now,
+			Status:        "unread",
+		},
+		{
+			PersonName:    "李HR",
+			CompanyName:   "腾讯",
+			JobTitle:      "前端工程师",
+			MessageDigest: "消息2",
+			Time:          now,
+			Status:        "read",
+		},
+	}
+
+	result := convertMessages(zhipinMsgs)
+
+	assert.Len(t, result, 2)
+	assert.Equal(t, "张HR", result[0].PersonName)
+	assert.Equal(t, "李HR", result[1].PersonName)
+	assert.Equal(t, MessageStatus("unread"), result[0].Status)
+	assert.Equal(t, MessageStatus("read"), result[1].Status)
+}
+
+// TestConvertMessagesEmpty 测试空消息列表
+func TestConvertMessagesEmpty(t *testing.T) {
+	result := convertMessages([]zhipin.Message{})
+	assert.Len(t, result, 0)
+}
+
+// TestMessageStatus 测试消息状态类型
+func TestMessageStatus(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected MessageStatus
+	}{
+		{"delivered", MessageStatusDelivered},
+		{"read", MessageStatusRead},
+		{"unknown", MessageStatusUnknown},
+	}
+
+	for _, tt := range tests {
+		result := MessageStatus(tt.input)
+		assert.Equal(t, tt.expected, result)
+	}
+}

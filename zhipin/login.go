@@ -200,9 +200,6 @@ func (l *Login) CheckLoginStatus(ctx context.Context) (bool, error) {
 	}
 	logrus.Debugf("page loaded")
 
-	// 等待页面稳定
-	time.Sleep(time.Second)
-
 	// 检查是否有登录按钮（未登录）
 	exists, _, err := pp.Has(".btns .header-login-btn")
 	if err != nil {

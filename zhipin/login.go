@@ -87,9 +87,30 @@ func navigateAndWait(ctx context.Context, page *rod.Page, url string) (*rod.Page
 
 	baseLog.WithField("elapsed_ms", time.Since(startAt).Milliseconds()).Debug("DOMContentLoaded done")
 
-	baseLog.WithField("idle_quiet_ms", int64(500*time.Millisecond/time.Millisecond)).Debug("wait request idle begin")
-	waitIdle := pp.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)
-	waitIdle()
+	idleQuiet := 500 * time.Millisecond
+	idleWaitMax := 3 * time.Second
+	baseLog.WithFields(logrus.Fields{
+		"idle_quiet_ms":    idleQuiet.Milliseconds(),
+		"idle_wait_max_ms": idleWaitMax.Milliseconds(),
+	}).Debug("wait request idle begin")
+
+	idleStartAt := time.Now()
+	idlePage, cancelIdle := pp.WithCancel()
+	defer cancelIdle()
+	done := make(chan struct{})
+	go func() {
+		waitIdle := idlePage.WaitRequestIdle(idleQuiet, nil, nil, nil)
+		waitIdle()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		baseLog.WithField("idle_elapsed_ms", time.Since(idleStartAt).Milliseconds()).Debug("request idle done")
+	case <-time.After(idleWaitMax):
+		cancelIdle()
+		baseLog.WithField("idle_elapsed_ms", time.Since(idleStartAt).Milliseconds()).Warn("wait request idle timeout, continue")
+	}
 
 	baseLog.WithField("elapsed_ms", time.Since(startAt).Milliseconds()).Debug("*page loaded*")
 

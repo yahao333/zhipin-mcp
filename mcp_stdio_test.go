@@ -176,7 +176,7 @@ func TestJSONRPCResponse(t *testing.T) {
 // TestMCPStdioServerHandleRequest 测试请求处理
 func TestMCPStdioServerHandleRequest(t *testing.T) {
 	// 创建测试服务器
-	mcpServer := NewMCPServer(nil)
+	mcpServer := NewMCPServer(NewZhipinService())
 	stdioServer := NewMCPStdioServer(mcpServer)
 
 	// 测试 handlePing
@@ -194,7 +194,7 @@ func TestMCPStdioServerHandleRequest(t *testing.T) {
 
 // TestMCPStdioServerHandleToolsList 测试 tools/list 处理
 func TestMCPStdioServerHandleToolsList(t *testing.T) {
-	mcpServer := NewMCPServer(nil)
+	mcpServer := NewMCPServer(NewZhipinService())
 	stdioServer := NewMCPStdioServer(mcpServer)
 
 	req := JSONRPCRequest{
@@ -214,7 +214,7 @@ func TestMCPStdioServerHandleToolsList(t *testing.T) {
 
 // TestMCPStdioServerHandleInitialize 测试 initialize 处理
 func TestMCPStdioServerHandleInitialize(t *testing.T) {
-	mcpServer := NewMCPServer(nil)
+	mcpServer := NewMCPServer(NewZhipinService())
 	stdioServer := NewMCPStdioServer(mcpServer)
 
 	req := JSONRPCRequest{
@@ -236,7 +236,7 @@ func TestMCPStdioServerHandleInitialize(t *testing.T) {
 
 // TestMCPStdioServerUnknownMethod 测试未知方法处理
 func TestMCPStdioServerUnknownMethod(t *testing.T) {
-	mcpServer := NewMCPServer(nil)
+	mcpServer := NewMCPServer(NewZhipinService())
 	stdioServer := NewMCPStdioServer(mcpServer)
 
 	req := JSONRPCRequest{
@@ -256,7 +256,7 @@ func TestMCPStdioServerUnknownMethod(t *testing.T) {
 // TestMCPStdioServerToolCall 测试工具调用
 func TestMCPStdioServerToolCall(t *testing.T) {
 	// 注意：这里只测试参数解析，不实际执行工具
-	mcpServer := NewMCPServer(nil)
+	mcpServer := NewMCPServer(NewZhipinService())
 	stdioServer := NewMCPStdioServer(mcpServer)
 
 	// 构建 tools/call 请求

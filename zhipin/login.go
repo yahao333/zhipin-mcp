@@ -2,7 +2,9 @@ package zhipin
 
 import (
 	"context"
+	"bytes"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -379,10 +381,15 @@ func (l *Login) downloadImage(ctx context.Context, url string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("downloadImage: unexpected status code: %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("downloadImage: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // WaitForLogin 等待扫码登录成功

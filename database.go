@@ -131,7 +131,7 @@ func SaveAppliedJob(job *AppliedJob) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, job.JobID, job.JobTitle, job.CompanyName, job.SalaryRange, job.City, job.AppliedAt, job.Status, job.ErrorMsg, time.Now())
 	if err != nil {
-		return fmt.Errorf("保存已投递职位失败: %v", err)
+		return fmt.Errorf("SaveAppliedJob: %w", err)
 	}
 	return nil
 }
@@ -200,7 +200,10 @@ func UpdateDeliveryStats(success bool) error {
 	}
 
 	// 如果没有今天的记录，则插入
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("UpdateDeliveryStats: %w", err)
+	}
 	if rowsAffected == 0 {
 		_, err = db.Exec(`
 			INSERT INTO delivery_stats (date, total_delivered, success_count, failed_count, last_delivered_at)

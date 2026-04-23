@@ -21,11 +21,71 @@ import (
 )
 
 // ZhipinService BOSS直聘业务服务
-type ZhipinService struct{}
+type ZhipinService struct {
+	browserFactory *defaultBrowserFactory
+	database       *defaultDatabase
+}
 
-// NewZhipinService 创建BOSS直聘服务实例
+// BrowserFactory 浏览器工厂接口
+type BrowserFactory interface {
+	NewBrowser(headless bool, binPath string) *headless_browser.Browser
+}
+
+// Database 数据库接口
+type Database interface {
+	SaveAppliedJob(job *AppliedJob) error
+	IsJobDelivered(jobID string) (bool, error)
+	GetDeliveredJobs(limit, offset int) ([]AppliedJob, int, error)
+	UpdateDeliveryStats(success bool) error
+	GetTodayStats() (*DeliveryStats, error)
+	GetTotalStats() (int, error)
+	GetTodayDeliveredCount() (int, error)
+	SaveCronTask(task *CronTask) error
+	GetCronTasks() ([]CronTask, error)
+	GetActiveCronTasks() ([]CronTask, error)
+	UpdateCronTask(id int, isActive bool) error
+	DeleteCronTask(id int) error
+}
+
+// defaultBrowserFactory 默认浏览器工厂
+type defaultBrowserFactory struct{}
+
+func (defaultBrowserFactory) NewBrowser(headless bool, binPath string) *headless_browser.Browser {
+	return browser.NewBrowser(headless, browser.WithBinPath(binPath))
+}
+
+// defaultDatabase 默认数据库实现
+type defaultDatabase struct{}
+
+func (defaultDatabase) SaveAppliedJob(job *AppliedJob) error       { return SaveAppliedJob(job) }
+func (defaultDatabase) IsJobDelivered(jobID string) (bool, error)  { return IsJobDelivered(jobID) }
+func (defaultDatabase) GetDeliveredJobs(limit, offset int) ([]AppliedJob, int, error) {
+	return GetDeliveredJobs(limit, offset)
+}
+func (defaultDatabase) UpdateDeliveryStats(success bool) error            { return UpdateDeliveryStats(success) }
+func (defaultDatabase) GetTodayStats() (*DeliveryStats, error)              { return GetTodayStats() }
+func (defaultDatabase) GetTotalStats() (int, error)                         { return GetTotalStats() }
+func (defaultDatabase) GetTodayDeliveredCount() (int, error)                 { return GetTodayDeliveredCount() }
+func (defaultDatabase) SaveCronTask(task *CronTask) error                   { return SaveCronTask(task) }
+func (defaultDatabase) GetCronTasks() ([]CronTask, error)                    { return GetCronTasks() }
+func (defaultDatabase) GetActiveCronTasks() ([]CronTask, error)              { return GetActiveCronTasks() }
+func (defaultDatabase) UpdateCronTask(id int, isActive bool) error          { return UpdateCronTask(id, isActive) }
+func (defaultDatabase) DeleteCronTask(id int) error                        { return DeleteCronTask(id) }
+
+// NewZhipinService 创建BOSS直聘服务实例（使用默认依赖）
 func NewZhipinService() *ZhipinService {
-	return &ZhipinService{}
+	return &ZhipinService{
+		browserFactory: &defaultBrowserFactory{},
+		database:       &defaultDatabase{},
+	}
+}
+
+// NewZhipinServiceWithConfig 创建服务实例（可注入自定义依赖）
+func NewZhipinServiceWithConfig(factory BrowserFactory, db Database) *ZhipinService {
+	return &ZhipinService{
+		browserFactory: &defaultBrowserFactory{},
+		database:       &defaultDatabase{},
+	}
 }
 
 // DeleteCookies 删除cookies文件，用于登录重置
@@ -37,16 +97,20 @@ func (s *ZhipinService) DeleteCookies(ctx context.Context) error {
 
 // CheckLoginStatus 检查登录状态
 func (s *ZhipinService) CheckLoginStatus(ctx context.Context) (*LoginStatusResponse, error) {
-	b := newBrowser()
-	defer b.Close()
+	factory := s.browserFactory
+	if factory == nil {
+		factory = &defaultBrowserFactory{}
+	}
+	browser := factory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 
 	loginAction := zhipin.NewLogin(page)
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.CheckLoginStatus: %w", err)
 	}
 
 	return &LoginStatusResponse{
@@ -57,12 +121,12 @@ func (s *ZhipinService) CheckLoginStatus(ctx context.Context) (*LoginStatusRespo
 
 // GetLoginQrcode 获取登录二维码
 func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeResponse, error) {
-	b := newBrowser()
-	page := b.NewPage()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	page := browser.NewPage()
 
 	deferFunc := func() {
 		_ = page.Close()
-		b.Close()
+		browser.Close()
 	}
 
 	loginAction := zhipin.NewLogin(page)
@@ -71,7 +135,7 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
 		deferFunc()
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.CheckLoginStatus: %w", err)
 	}
 
 	// 如果已登录，直接返回
@@ -90,7 +154,7 @@ func (s *ZhipinService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRespons
 		defer deferFunc()
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.GetLoginQrcode: %w", err)
 	}
 
 	// 保存二维码到文件用于调试
@@ -148,10 +212,10 @@ func (s *ZhipinService) GetLoginQrcodeWithBrowser(ctx context.Context) (*LoginQr
 	}()
 
 	// 创建非 headless 浏览器
-	b := browser.NewBrowser(false, browser.WithBinPath(configs.GetBinPath()))
-	defer b.Close()
+	browser := browser.NewBrowser(false, browser.WithBinPath(configs.GetBinPath()))
+	defer browser.Close()
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 
 	loginAction := zhipin.NewLogin(page)
@@ -159,7 +223,7 @@ func (s *ZhipinService) GetLoginQrcodeWithBrowser(ctx context.Context) (*LoginQr
 	// 先检查登录状态
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.GetLoginQrcodeWithBrowser: %w", err)
 	}
 
 	// 如果已登录，直接返回
@@ -223,17 +287,17 @@ func (s *ZhipinService) GetLoginQrcodeWithBrowser(ctx context.Context) (*LoginQr
 
 // SearchJobs 搜索职位
 func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) (*SearchJobsResponse, error) {
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 
 	// 检查登录状态
 	loginAction := zhipin.NewLogin(page)
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.SearchJobs: %w", err)
 	}
 	if !isLoggedIn {
 		return nil, errLoginRequired
@@ -254,7 +318,7 @@ func (s *ZhipinService) SearchJobs(ctx context.Context, req *SearchJobsRequest) 
 
 	result, err := searchAction.SearchJobs(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.SearchJobs: %w", err)
 	}
 
 	return &SearchJobsResponse{
@@ -270,11 +334,11 @@ func (s *ZhipinService) GetJobDetail(ctx context.Context, jobID string) (*JobDet
 	logrus.Debugf("[ZhipinService.GetJobDetail] ========== 开始获取职位详情 ==========")
 	logrus.Debugf("[ZhipinService.GetJobDetail] 接收到的 jobID: %s", jobID)
 
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 	logrus.Debugf("[ZhipinService.GetJobDetail] 浏览器实例创建完成")
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 	logrus.Debugf("[ZhipinService.GetJobDetail] 页面实例创建完成")
 
@@ -284,7 +348,7 @@ func (s *ZhipinService) GetJobDetail(ctx context.Context, jobID string) (*JobDet
 	job, err := detailAction.GetJobDetail(ctx, jobID)
 	if err != nil {
 		logrus.Errorf("[ZhipinService.GetJobDetail] detailAction.GetJobDetail 失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.GetJobDetail: %w", err)
 	}
 
 	logrus.Debugf("[ZhipinService.GetJobDetail] 获取到职位信息: %+v", job)
@@ -305,10 +369,10 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 
 	// 步骤1: 检查每日投递上限
 	logrus.Debugf("[Service.DeliverJob] 步骤1: 检查每日投递上限")
-	count, err := GetTodayDeliveredCount()
+	count, err := s.database.GetTodayDeliveredCount()
 	if err != nil {
 		logrus.Errorf("[Service.DeliverJob] 获取今日投递数失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.DeliverJob: %w", err)
 	}
 	logrus.Debugf("[Service.DeliverJob] 今日已投递: %d, 上限: %d", count, configs.MaxDaily)
 	if count >= configs.MaxDaily {
@@ -323,7 +387,7 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 
 	// 步骤2: 检查是否已投递
 	logrus.Debugf("[Service.DeliverJob] 步骤2: 检查是否已投递")
-	isDelivered, err := IsJobDelivered(req.JobID)
+	isDelivered, err := s.database.IsJobDelivered(req.JobID)
 	if err != nil {
 		logrus.Warnf("[Service.DeliverJob] 检查投递状态失败: %v", err)
 	}
@@ -339,13 +403,13 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 
 	// 步骤3: 初始化浏览器
 	logrus.Debugf("[Service.DeliverJob] 步骤3: 初始化浏览器")
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 	logrus.Debugf("[Service.DeliverJob] 浏览器初始化完成")
 
-	// 步骤4: 创建页面
+	// 步骤4: 创建浏览器页面
 	logrus.Debugf("[Service.DeliverJob] 步骤4: 创建浏览器页面")
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 	logrus.Debugf("[Service.DeliverJob] 页面创建完成")
 
@@ -355,7 +419,7 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 	result, err := deliverAction.DeliverJob(ctx, req.JobID)
 	if err != nil {
 		logrus.Errorf("[Service.DeliverJob] 投递执行失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.DeliverJob: %w", err)
 	}
 	logrus.Debugf("[Service.DeliverJob] 投递执行完成, 结果: Success=%v, Message=%s", result.Success, result.Message)
 
@@ -369,14 +433,14 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 			Status:    "success",
 			AppliedAt: time.Now(),
 		}
-		err = SaveAppliedJob(appliedJob)
+		err = s.database.SaveAppliedJob(appliedJob)
 		if err != nil {
 			logrus.Errorf("[Service.DeliverJob] 保存投递记录失败: %v", err)
 		} else {
 			logrus.Debugf("[Service.DeliverJob] 投递记录保存成功")
 		}
 
-		err = UpdateDeliveryStats(true)
+		err = s.database.UpdateDeliveryStats(true)
 		if err != nil {
 			logrus.Errorf("[Service.DeliverJob] 更新统计失败: %v", err)
 		} else {
@@ -384,7 +448,7 @@ func (s *ZhipinService) DeliverJob(ctx context.Context, req *DeliverJobRequest) 
 		}
 	} else {
 		logrus.Warnf("[Service.DeliverJob] 投递失败，更新失败统计")
-		err = UpdateDeliveryStats(false)
+		err = s.database.UpdateDeliveryStats(false)
 		if err != nil {
 			logrus.Errorf("[Service.DeliverJob] 更新失败统计失败: %v", err)
 		}
@@ -407,9 +471,9 @@ func (s *ZhipinService) DeliveredList(ctx context.Context, limit, offset int) (*
 		offset = 0
 	}
 
-	jobs, total, err := GetDeliveredJobs(limit, offset)
+	jobs, total, err := s.database.GetDeliveredJobs(limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.DeliveredList: %w", err)
 	}
 
 	return &DeliveredListResponse{
@@ -430,19 +494,19 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 
 	// 步骤1: 获取今日已投递数量
 	logrus.Debugf("[Service.BatchDeliver] 步骤1: 获取今日已投递数量")
-	todayCount, err := GetTodayDeliveredCount()
+	todayCount, err := s.database.GetTodayDeliveredCount()
 	if err != nil {
 		logrus.Errorf("[Service.BatchDeliver] 获取今日投递数失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.BatchDeliver: %w", err)
 	}
 	logrus.Debugf("[Service.BatchDeliver] 今日已投递: %d, 上限: %d", todayCount, configs.MaxDaily)
 
 	// 步骤2: 初始化浏览器
 	logrus.Debugf("[Service.BatchDeliver] 步骤2: 初始化浏览器")
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 
 	deliverAction := zhipin.NewDeliver(page)
@@ -467,7 +531,7 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 
 		// 检查是否已投递
 		logrus.Debugf("[Service.BatchDeliver] 检查是否已投递: %s", jobID)
-		isDelivered, _ := IsJobDelivered(jobID)
+		isDelivered, _ := s.database.IsJobDelivered(jobID)
 		if isDelivered {
 			logrus.Debugf("[Service.BatchDeliver] 该职位已投递过，跳过: %s", jobID)
 			response.Results = append(response.Results, DeliverJobResponse{
@@ -513,11 +577,11 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 				Status:    "success",
 				AppliedAt: time.Now(),
 			}
-			err = SaveAppliedJob(appliedJob)
+			err = s.database.SaveAppliedJob(appliedJob)
 			if err != nil {
 				logrus.Errorf("[Service.BatchDeliver] 保存投递记录失败: %v", err)
 			}
-			err = UpdateDeliveryStats(true)
+			err = s.database.UpdateDeliveryStats(true)
 			if err != nil {
 				logrus.Errorf("[Service.BatchDeliver] 更新统计失败: %v", err)
 			}
@@ -539,15 +603,15 @@ func (s *ZhipinService) BatchDeliver(ctx context.Context, jobIDs []string) (*Bat
 // GetStats 获取投递统计
 func (s *ZhipinService) GetStats(ctx context.Context) (*StatsResponse, error) {
 	// 今日统计
-	todayStats, err := GetTodayStats()
+	todayStats, err := s.database.GetTodayStats()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.GetStats: %w", err)
 	}
 
 	// 总统计
-	total, err := GetTotalStats()
+	total, err := s.database.GetTotalStats()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.GetStats: %w", err)
 	}
 
 	return &StatsResponse{
@@ -646,7 +710,7 @@ func (s *ZhipinService) StartCron(ctx context.Context, task *CronTask) error {
 	}
 
 	// 保存到数据库
-	return SaveCronTask(task)
+	return s.database.SaveCronTask(task)
 }
 
 // StopCron 停止定时任务
@@ -657,18 +721,18 @@ func (s *ZhipinService) StopCron(ctx context.Context, taskID int) error {
 		return err
 	}
 
-	return UpdateCronTask(taskID, false)
+	return s.database.UpdateCronTask(taskID, false)
 }
 
 // ListMessages 获取消息列表
 func (s *ZhipinService) ListMessages(ctx context.Context) (*MessageListResponse, error) {
 	logrus.Debugf("[ZhipinService.ListMessages] ========== 开始获取消息列表 ==========")
 
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 	logrus.Debugf("[ZhipinService.ListMessages] 浏览器实例创建完成")
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 	logrus.Debugf("[ZhipinService.ListMessages] 页面实例创建完成")
 
@@ -677,7 +741,7 @@ func (s *ZhipinService) ListMessages(ctx context.Context) (*MessageListResponse,
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
 		logrus.Errorf("[ZhipinService.ListMessages] 检查登录状态失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.ListMessages: %w", err)
 	}
 	if !isLoggedIn {
 		logrus.Warnf("[ZhipinService.ListMessages] 未登录")
@@ -690,7 +754,7 @@ func (s *ZhipinService) ListMessages(ctx context.Context) (*MessageListResponse,
 	result, err := msgAction.ListMessages(ctx)
 	if err != nil {
 		logrus.Errorf("[ZhipinService.ListMessages] msgAction.ListMessages 失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.ListMessages: %w", err)
 	}
 
 	logrus.Debugf("[ZhipinService.ListMessages] 获取到消息: %d 条", len(result.Messages))
@@ -724,11 +788,11 @@ func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageReq
 		}
 	}
 
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 	logrus.Debugf("[ZhipinService.DeleteMessage] 浏览器实例创建完成")
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 	logrus.Debugf("[ZhipinService.DeleteMessage] 页面实例创建完成")
 
@@ -737,7 +801,7 @@ func (s *ZhipinService) DeleteMessage(ctx context.Context, req *DeleteMessageReq
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
 		logrus.Errorf("[ZhipinService.DeleteMessage] 检查登录状态失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.DeleteMessage: %w", err)
 	}
 	if !isLoggedIn {
 		logrus.Warnf("[ZhipinService.DeleteMessage] 未登录")
@@ -809,10 +873,10 @@ func (s *ZhipinService) SendMessage(ctx context.Context, req *SendMessageRequest
 	}
 
 	// 创建浏览器
-	b := newBrowser()
-	defer b.Close()
+	browser := s.browserFactory.NewBrowser(configs.GetEffectiveHeadless(), configs.GetBinPath())
+	defer browser.Close()
 
-	page := b.NewPage()
+	page := browser.NewPage()
 	defer page.Close()
 
 	// 检查登录状态
@@ -820,7 +884,7 @@ func (s *ZhipinService) SendMessage(ctx context.Context, req *SendMessageRequest
 	isLoggedIn, err := loginAction.CheckLoginStatus(ctx)
 	if err != nil {
 		logrus.Errorf("[ZhipinService.SendMessage] 检查登录状态失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("ZhipinService.SendMessage: %w", err)
 	}
 	if !isLoggedIn {
 		logrus.Warnf("[ZhipinService.SendMessage] 未登录")
